@@ -27,6 +27,20 @@ struct CPU {
     cycles: usize,
 }
 
+#[derive(Debug)]
+pub enum AddressingMode {
+    Immediate,
+    ZeroPage,
+    ZeroPageX,
+    ZeroPageY,
+    Absolute,
+    AbsoluteX,
+    AbsoluteY,
+    IndirectX,
+    IndirectY,
+    None,
+}
+
 impl CPU {
     fn new() -> Self {
         CPU {
@@ -56,11 +70,44 @@ impl CPU {
         (hi as u16) << 8 | lo as u16
     }
 
+    /// used for the "index indirect" and "indirect indexed" lookups
+    fn mem_read_zero_page_wrapping(&self, ptr: u8) -> u16 {
+        let lo = self.mem_read(ptr as u16);
+        let hi = self.mem_read(ptr.wrapping_add(1) as u16);
+        (hi as u16) << 8 | (lo as u16)
+    }
+
     fn mem_write_u16(&mut self, addr: u16, val: u16) {
         let hi = (val >> 8) as u8;
         let lo = (val & 0x00ff) as u8;
         self.mem_write(addr, lo);
         self.mem_write(addr + 1, hi);
+    }
+
+    fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
+        match mode {
+            AddressingMode::Immediate => self.pc,
+            AddressingMode::ZeroPage => self.mem_read(self.pc) as u16,
+            AddressingMode::ZeroPageX => self.mem_read(self.pc).wrapping_add(self.x) as u16,
+            AddressingMode::ZeroPageY => self.mem_read(self.pc).wrapping_add(self.y) as u16,
+            AddressingMode::Absolute => self.mem_read_u16(self.pc),
+            AddressingMode::AbsoluteX => self.mem_read_u16(self.pc).wrapping_add(self.x as u16),
+            AddressingMode::AbsoluteY => self.mem_read_u16(self.pc).wrapping_add(self.y as u16),
+            // TODO: is basic Indirect supported
+            AddressingMode::IndirectX => {
+                // "Indexed indirect"
+                let base = self.mem_read(self.pc);
+                let target = base.wrapping_add(self.x); // indexed
+                self.mem_read_zero_page_wrapping(target) // indirect
+            }
+            AddressingMode::IndirectY => {
+                // "Indirect indexed"
+                let base = self.mem_read(self.pc);
+                let target = self.mem_read_zero_page_wrapping(base); // indirect
+                target.wrapping_add(self.y as u16) // indexed
+            }
+            AddressingMode::None => panic!("mode {:?} is not supported", mode),
+        }
     }
 
     // load method should load a program into PRG ROM space and save the reference to the code into 0xFFFC memory cell
