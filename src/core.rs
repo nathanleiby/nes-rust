@@ -41,16 +41,58 @@ impl CPU {
         }
     }
 
-    fn interpret(&mut self, ops: Vec<u8>) {
-        self.pc = 0;
+    fn mem_read(&self, addr: u16) -> u8 {
+        self.memory_map[addr as usize]
+    }
 
+    fn mem_write(&mut self, addr: u16, val: u8) {
+        self.memory_map[addr as usize] = val;
+    }
+
+    fn mem_read_u16(&self, addr: u16) -> u16 {
+        // NES CPU uses Little-Endian addressing
+        let lo = self.memory_map[addr as usize];
+        let hi = self.memory_map[(addr + 1) as usize];
+        (hi as u16) << 8 | lo as u16
+    }
+
+    fn mem_write_u16(&mut self, addr: u16, val: u16) {
+        let hi = (val >> 8) as u8;
+        let lo = (val & 0x00ff) as u8;
+        self.mem_write(addr, lo);
+        self.mem_write(addr + 1, hi);
+    }
+
+    // load method should load a program into PRG ROM space and save the reference to the code into 0xFFFC memory cell
+    fn load(&mut self, program: Vec<u8>) {
+        let start = 0x8000;
+        self.memory_map[start..start + program.len()].copy_from_slice(&program);
+        self.mem_write_u16(0xFFFC, start as u16);
+    }
+
+    fn load_and_run(&mut self, program: Vec<u8>) {
+        self.load(program);
+        self.reset();
+        self.run();
+    }
+
+    // reset method should restore the state of all registers, and initialize program_counter by the 2-byte value stored at 0xFFFC
+    fn reset(&mut self) {
+        self.a = 0;
+        self.x = 0;
+        self.y = 0;
+        self.sp = 0;
+        self.pc = self.mem_read_u16(0xFFFC);
+    }
+
+    fn run(&mut self) {
         loop {
-            let op = ops[self.pc as usize];
+            let op = self.mem_read(self.pc);
             self.pc += 1;
             match op {
-                // LDA
+                // LDA - load next byte into register A
                 0xA9 => {
-                    let param = ops[self.pc as usize];
+                    let param = self.mem_read(self.pc);
                     self.a = param;
                     self.pc += 1;
 
@@ -102,7 +144,7 @@ mod tests {
     #[test]
     fn test_0xa0_lda_load_nonzero() {
         let mut cpu = CPU::new();
-        cpu.interpret(vec![0xa9, 0x55, 0x00]);
+        cpu.load_and_run(vec![0xa9, 0x55, 0x00]);
         assert_eq!(cpu.a, 0x55);
         assert_eq!(cpu.status, 0b0000_0000);
     }
@@ -110,7 +152,7 @@ mod tests {
     #[test]
     fn test_0xa9_lda_load_zero() {
         let mut cpu = CPU::new();
-        cpu.interpret(vec![0xa9, 0x00, 0x00]);
+        cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
         assert_eq!(cpu.a, 0x00);
         assert_eq!(cpu.status, 0b0000_0010);
     }
@@ -118,8 +160,10 @@ mod tests {
     #[test]
     fn test_0xaa_tax_move_a_to_x() {
         let mut cpu = CPU::new();
+        cpu.load(vec![0xaa, 0x00]);
+        cpu.reset();
         cpu.a = 123;
-        cpu.interpret(vec![0xaa, 0x00]);
+        cpu.run();
         assert_eq!(cpu.x, 123);
         assert_eq!(cpu.status, 0b0000_0000);
     }
@@ -127,9 +171,11 @@ mod tests {
     #[test]
     fn test_0xaa_tax_move_a_to_x_sets_zero_flag() {
         let mut cpu = CPU::new();
+        cpu.load(vec![0xaa, 0x00]);
+        cpu.reset();
+        cpu.x = 0xff;
         cpu.a = 0;
-        cpu.x = 123;
-        cpu.interpret(vec![0xaa, 0x00]);
+        cpu.run();
         assert_eq!(cpu.x, 0);
         assert_eq!(cpu.status, 0b0000_0010);
     }
@@ -137,7 +183,7 @@ mod tests {
     #[test]
     fn test_5_ops_working_together() {
         let mut cpu = CPU::new();
-        cpu.interpret(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
+        cpu.load_and_run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
 
         assert_eq!(cpu.x, 0xc1)
     }
@@ -145,8 +191,10 @@ mod tests {
     #[test]
     fn test_inx_overflow() {
         let mut cpu = CPU::new();
+        cpu.load(vec![0xe8, 0xe8, 0x00]);
+        cpu.reset();
         cpu.x = 0xff;
-        cpu.interpret(vec![0xe8, 0xe8, 0x00]);
+        cpu.run();
 
         assert_eq!(cpu.x, 1)
     }
