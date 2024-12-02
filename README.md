@@ -1,0 +1,12 @@
+# nes-rust ("Muenster")
+
+An emulator for the NES, written in Rust.
+
+Priorities:
+
+- WASM support from the start
+- Try Bevy game engine for Frontend (audio, input, screen)
+- Unit tested
+- CI on commit: linting, unit tests, releases
+- Try some Rust patterns for midsized projects... break up the repo into modules?
+

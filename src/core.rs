@@ -22,6 +22,9 @@ struct CPU {
     ///This is a set of flags
     // TODO: explore flagset representation
     status: u8,
+
+    /// total CPU cycles elapsed
+    cycles: usize,
 }
 
 impl CPU {
@@ -34,6 +37,7 @@ impl CPU {
             x: 0,
             y: 0,
             status: 0,
+            cycles: 0,
         }
     }
 
@@ -42,50 +46,53 @@ impl CPU {
 
         loop {
             let op = ops[self.pc as usize];
+            self.pc += 1;
             match op {
+                // LDA
+                0xA9 => {
+                    let param = ops[self.pc as usize];
+                    self.a = param;
+                    self.pc += 1;
+
+                    self.set_zero_and_negative_flags(self.a);
+                }
+                // BRK
+                0x00 => {
+                    return;
+                }
+                // TAX - transfer A to X
+                0xAA => {
+                    self.x = self.a;
+                    self.set_zero_and_negative_flags(self.x);
+                }
+                // INX  - increment X
+                0xE8 => {
+                    self.x = self.x.wrapping_add(1);
+                    self.set_zero_and_negative_flags(self.x)
+                }
                 _ => todo!(),
             }
         }
     }
-}
 
-// enum CPUMemoryMap {
-//     Ram = 0x0000,
-//     IORegisters = 0x2000,
-// }
+    fn set_zero_and_negative_flags(&mut self, val: u8) {
+        let z = val == 0;
+        if z {
+            // set the zero flag
+            self.status |= 0b0000_0010;
+        } else {
+            self.status &= 0b1111_1101;
+        }
+        let n = (val & 0b1000_0000) > 0;
+        if n {
+            // set the negative flag
+            self.status |= 0b1000_0000;
+        } else {
+            self.status &= 0b0111_1111;
+        }
+    }
 
-// const CPU_START_RAM: u8 = 0x0000;
-// const CPU_IO_REGISTERS: u8 = 0x2000;
-// const CPU_EXPANSION_ROM: u8 = 0x4020;
-// const CPU_SAVE_ROM: u8 = 0x6000;
-
-/// PPU (Picture Processing Unit)
-struct PPU {}
-
-/// RAM
-struct RAM {
-    /// W-RAM is used by CPU
-    w: [u8; 2048],
-    /// V-RAM is used by PPU
-    v: [u8; 2048],
-}
-
-/// Addr is a memory address
-type Addr = u16;
-
-/// APU (Audio Processing Unit): five-channel based sounds
-struct APU {}
-
-/// Cartridge
-/// Carries st least two large ROM chips - the Character ROM (CHR ROM) and the Program ROM (PRG ROM).
-struct Cartridge {
-    chracterRom: [u8; 1],
-    programRom: [u8; 1],
-}
-
-/// Gamepad represents which controls are currently pressed
-struct Gamepad {
-    buttons: [bool; 8],
+    // fn set_status_flag(&mut self, )
 }
 
 #[cfg(test)]
@@ -93,7 +100,54 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_interpret() {
-        assert_eq!(true, false);
+    fn test_0xa0_lda_load_nonzero() {
+        let mut cpu = CPU::new();
+        cpu.interpret(vec![0xa9, 0x55, 0x00]);
+        assert_eq!(cpu.a, 0x55);
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_0xa9_lda_load_zero() {
+        let mut cpu = CPU::new();
+        cpu.interpret(vec![0xa9, 0x00, 0x00]);
+        assert_eq!(cpu.a, 0x00);
+        assert_eq!(cpu.status, 0b0000_0010);
+    }
+
+    #[test]
+    fn test_0xaa_tax_move_a_to_x() {
+        let mut cpu = CPU::new();
+        cpu.a = 123;
+        cpu.interpret(vec![0xaa, 0x00]);
+        assert_eq!(cpu.x, 123);
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_0xaa_tax_move_a_to_x_sets_zero_flag() {
+        let mut cpu = CPU::new();
+        cpu.a = 0;
+        cpu.x = 123;
+        cpu.interpret(vec![0xaa, 0x00]);
+        assert_eq!(cpu.x, 0);
+        assert_eq!(cpu.status, 0b0000_0010);
+    }
+
+    #[test]
+    fn test_5_ops_working_together() {
+        let mut cpu = CPU::new();
+        cpu.interpret(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
+
+        assert_eq!(cpu.x, 0xc1)
+    }
+
+    #[test]
+    fn test_inx_overflow() {
+        let mut cpu = CPU::new();
+        cpu.x = 0xff;
+        cpu.interpret(vec![0xe8, 0xe8, 0x00]);
+
+        assert_eq!(cpu.x, 1)
     }
 }
