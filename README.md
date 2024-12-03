@@ -10,3 +10,10 @@ Priorities:
 - CI on commit: linting, unit tests, releases
 - Try some Rust patterns for midsized projects... break up the repo into modules?
 
+
+## References
+
+- Book with Walkthrough: https://bugzmanov.github.io/nes_ebook
+- Spec:
+  - https://www.nesdev.org/obelisk-6502-guide/reference.html
+  - http://www.6502.org/tutorials/6502opcodes.html

@@ -42,6 +42,7 @@ pub enum AddressingMode {
     None,
 }
 
+#[derive(Copy, Clone)]
 enum Flag {
     Negative,
     Overflow,
@@ -365,6 +366,16 @@ impl CPU {
                     self.pc += 1;
                 }
 
+                // Branch Instructions
+                0x10 => self.bpl(),
+                0x30 => self.bmi(),
+                0x50 => self.bvc(),
+                0x70 => self.bvs(),
+                0x90 => self.bcc(),
+                0xB0 => self.bcs(),
+                0xD0 => self.bne(),
+                0xF0 => self.beq(),
+
                 // CMP
                 0xC9 => {
                     self.cmp(&AddressingMode::Immediate);
@@ -506,7 +517,49 @@ impl CPU {
     }
 
     /// Branch Instructions
-    // TODO
+    fn branch_on_flag(&mut self, flag: Flag, is_set: bool) {
+        // TODO: this reads the operand from memory the same way as AddressingMode::Immediate...
+        // though the docs call this "Relative" addressing due to its use as an offset/displacement.
+        // Should I refactor to use an addressing mode?
+        let displacement = self.mem_read(self.pc);
+        self.pc += 1;
+
+        if self.get_flag(flag) == is_set {
+            self.pc += displacement as u16;
+        }
+    }
+
+    fn bpl(&mut self) {
+        self.branch_on_flag(Flag::Negative, false);
+    }
+
+    fn bmi(&mut self) {
+        self.branch_on_flag(Flag::Negative, true);
+    }
+
+    fn bvc(&mut self) {
+        self.branch_on_flag(Flag::Overflow, false);
+    }
+
+    fn bvs(&mut self) {
+        self.branch_on_flag(Flag::Overflow, true);
+    }
+
+    fn bcc(&mut self) {
+        self.branch_on_flag(Flag::Carry, false);
+    }
+
+    fn bcs(&mut self) {
+        self.branch_on_flag(Flag::Carry, true);
+    }
+
+    fn bne(&mut self) {
+        self.branch_on_flag(Flag::Zero, false);
+    }
+
+    fn beq(&mut self) {
+        self.branch_on_flag(Flag::Zero, true);
+    }
 
     /// BIT (test BITs)
     fn bit(&mut self, mode: &AddressingMode) {
@@ -700,6 +753,7 @@ mod tests {
             (AddressingMode::IndirectX, 0x11),
             (AddressingMode::IndirectY, 0x5533 + 2),
         ] {
+            println!("Testing addressing mode = {:?}", mode);
             let mut cpu = CPU::new();
             cpu.pc = pc;
             cpu.memory[0x11] = 0x22;
@@ -715,7 +769,6 @@ mod tests {
             cpu.memory[0x23] = 0x55;
 
             let actual = cpu.get_operand_address(&mode);
-            println!("Testing addressing mode = {:?}", mode);
             assert_eq!(actual, expected);
         }
     }
@@ -865,5 +918,44 @@ mod tests {
         assert_eq!(cpu.a, 0);
         assert_eq!(cpu.get_flag(Flag::Zero), true);
         assert_eq!(cpu.get_flag(Flag::Carry), true);
+    }
+
+    #[test]
+    fn test_branch_instructions() {
+        let specs = vec![
+            (0x10, Flag::Negative, false),
+            (0x30, Flag::Negative, true),
+            (0x50, Flag::Overflow, false),
+            (0x70, Flag::Overflow, true),
+            (0x90, Flag::Carry, false),
+            (0xb0, Flag::Carry, true),
+            (0xd0, Flag::Zero, false),
+            (0xf0, Flag::Zero, true),
+        ];
+        for (branch_ins, flag, branch_if) in specs {
+            let mut cpu = CPU::new();
+            let displacement = 5;
+            let program = vec![branch_ins, displacement];
+            cpu.load(program.clone());
+            cpu.reset();
+            cpu.update_flag(flag, branch_if);
+            cpu.run();
+            let consumed_bpl_op = 2;
+            let consumed_brk_op = 1;
+            assert_eq!(
+                cpu.pc,
+                CPU_START as u16 + consumed_bpl_op + displacement as u16 + consumed_brk_op
+            );
+
+            let mut cpu = CPU::new();
+            cpu.load(program);
+            cpu.reset();
+            cpu.update_flag(flag, !branch_if);
+            cpu.run();
+            assert_eq!(
+                cpu.pc,
+                CPU_START as u16 + consumed_bpl_op + 0 + consumed_brk_op
+            );
+        }
     }
 }
