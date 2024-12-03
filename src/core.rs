@@ -1,6 +1,6 @@
 /// CPU (Central Processing Unit)
 /// The NES uses  2A03, which is a modified version of the 6502 chip.
-struct CPU {
+pub struct CPU {
     memory_map: [u8; 0xffff],
 
     /// program counter
@@ -42,7 +42,7 @@ pub enum AddressingMode {
 }
 
 impl CPU {
-    fn new() -> Self {
+    pub fn new() -> Self {
         CPU {
             memory_map: [0; 0xffff],
             pc: 0,
@@ -55,11 +55,11 @@ impl CPU {
         }
     }
 
-    fn mem_read(&self, addr: u16) -> u8 {
+    pub fn mem_read(&self, addr: u16) -> u8 {
         self.memory_map[addr as usize]
     }
 
-    fn mem_write(&mut self, addr: u16, val: u8) {
+    pub fn mem_write(&mut self, addr: u16, val: u8) {
         self.memory_map[addr as usize] = val;
     }
 
@@ -110,20 +110,21 @@ impl CPU {
     }
 
     // load method should load a program into PRG ROM space and save the reference to the code into 0xFFFC memory cell
-    fn load(&mut self, program: Vec<u8>) {
-        let start = 0x8000;
+    pub fn load(&mut self, program: Vec<u8>) {
+        // let start = 0x8000;
+        let start = 0x0600; // TODO: restore later. This is temporarily overriden to support the "snake" game's custom setup
         self.memory_map[start..start + program.len()].copy_from_slice(&program);
         self.mem_write_u16(0xFFFC, start as u16);
     }
 
-    fn load_and_run(&mut self, program: Vec<u8>) {
+    pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.load(program);
         self.reset();
         self.run();
     }
 
     // reset method should restore the state of all registers, and initialize program_counter by the 2-byte value stored at 0xFFFC
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.a = 0;
         self.x = 0;
         self.y = 0;
@@ -131,8 +132,17 @@ impl CPU {
         self.pc = self.mem_read_u16(0xFFFC);
     }
 
-    fn run(&mut self) {
+    pub fn run(&mut self) {
+        self.run_with_callback(|_| {});
+    }
+
+    pub fn run_with_callback<F>(&mut self, mut callback: F)
+    where
+        F: FnMut(&mut CPU),
+    {
         loop {
+            callback(self);
+
             let op = self.mem_read(self.pc);
             self.pc += 1;
             match op {
@@ -215,7 +225,10 @@ impl CPU {
                     self.x = self.x.wrapping_add(1);
                     self.set_zero_and_negative_flags(self.x)
                 }
-                _ => todo!(),
+                _ => {
+                    println!("Op {:#04x} not yet implemented", op);
+                    todo!();
+                }
             }
         }
     }
