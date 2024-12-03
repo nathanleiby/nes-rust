@@ -435,6 +435,40 @@ impl CPU {
                     self.pc += 1;
                 }
 
+                // EOR
+                0x49 => {
+                    self.eor(&AddressingMode::Immediate);
+                    self.pc += 1;
+                }
+                0x45 => {
+                    self.eor(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0x55 => {
+                    self.eor(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0x4D => {
+                    self.eor(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0x5D => {
+                    self.eor(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+                0x59 => {
+                    self.eor(&AddressingMode::AbsoluteY);
+                    self.pc += 2;
+                }
+                0x41 => {
+                    self.eor(&AddressingMode::IndirectX);
+                    self.pc += 1;
+                }
+                0x51 => {
+                    self.eor(&AddressingMode::IndirectY);
+                    self.pc += 1;
+                }
+
                 // Branch Instructions
                 0x10 => self.bpl(),
                 0x30 => self.bmi(),
@@ -477,6 +511,52 @@ impl CPU {
                 0xD1 => {
                     self.cmp(&AddressingMode::IndirectY);
                     self.pc += 1;
+                }
+
+                // CPX
+                0xE0 => {
+                    self.cpx(&AddressingMode::Immediate);
+                    self.pc += 1;
+                }
+                0xE4 => {
+                    self.cpx(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0xEC => {
+                    self.cpx(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+
+                // CPY
+                0xC0 => {
+                    self.cpy(&AddressingMode::Immediate);
+                    self.pc += 1;
+                }
+                0xC4 => {
+                    self.cpy(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0xCC => {
+                    self.cpy(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+
+                // DEC
+                0xC6 => {
+                    self.dec(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0xD6 => {
+                    self.dec(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0xCE => {
+                    self.dec(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0xDE => {
+                    self.dec(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
                 }
 
                 // INC
@@ -524,15 +604,6 @@ impl CPU {
                 0x98 => self.tya(),
                 0x88 => self.dey(),
                 0xC8 => self.iny(),
-
-                // TAX (Transfer A to X)    $AA
-                // TXA (Transfer X to A)    $8A
-                // DEX (DEcrement X)        $CA
-                // INX (INcrement X)        $E8
-                // TAY (Transfer A to Y)    $A8
-                // TYA (Transfer Y to A)    $98
-                // DEY (DEcrement Y)        $88
-                // INY (INcrement Y)        $C8
 
                 // Flag (Processor Status) Instructions
 
@@ -643,19 +714,52 @@ impl CPU {
         todo!()
     }
 
-    /// CMP (CoMPare accumulator)
-    fn cmp(&mut self, mode: &AddressingMode) {
+    // Comparisons //
+
+    fn compare(&mut self, mode: &AddressingMode, val: u8) {
         let addr = self.get_operand_address(mode);
         let param = self.mem_read(addr);
 
-        let gte = self.a >= param;
+        let gte = val >= param;
         self.update_flag(Flag::Carry, gte);
 
-        let eq = self.a == param;
+        let eq = val == param;
         self.update_flag(Flag::Zero, eq);
 
-        let sign = self.a >= 0x80;
+        let sign = val >= 0x80;
         self.update_flag(Flag::Negative, sign);
+    }
+
+    /// CMP (CoMPare accumulator)
+    fn cmp(&mut self, mode: &AddressingMode) {
+        self.compare(mode, self.a);
+    }
+
+    /// CPX (ComPare X register)
+    fn cpx(&mut self, mode: &AddressingMode) {
+        self.compare(mode, self.x)
+    }
+
+    /// CPY (ComPare Y register)
+    fn cpy(&mut self, mode: &AddressingMode) {
+        self.compare(mode, self.y)
+    }
+
+    /// DEC (DECrement memory)
+    fn dec(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let old_val = self.mem_read(addr);
+        let new_val = old_val.wrapping_sub(1);
+        self.mem_write(addr, new_val);
+        self.set_zero_and_negative_flags(new_val);
+    }
+
+    /// EOR (bitwise Exclusive OR)
+    fn eor(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let param = self.mem_read(addr);
+        self.a ^= param;
+        self.set_zero_and_negative_flags(self.a);
     }
 
     /// INC (INCrement memory)
@@ -668,6 +772,15 @@ impl CPU {
     }
 
     // Register instructions //
+    // TAX (Transfer A to X)    $AA
+    // TXA (Transfer X to A)    $8A
+    // DEX (DEcrement X)        $CA
+    // INX (INcrement X)        $E8
+    // TAY (Transfer A to Y)    $A8
+    // TYA (Transfer Y to A)    $98
+    // DEY (DEcrement Y)        $88
+    // INY (INcrement Y)        $C8
+
     fn tax(&mut self) {
         self.x = self.a;
         self.set_zero_and_negative_flags(self.x);
@@ -737,6 +850,7 @@ impl CPU {
 
     /// LSR (Logical Shift Right)
     fn lsr(&mut self, mode: &AddressingMode) {
+        // I've overloaded the addressing mode idea to handle accumlator variant of
         if mode == &AddressingMode::None {
             let old_val = self.a;
             let new_val = self.a >> 1;
@@ -1172,13 +1286,89 @@ mod tests {
 
     #[test]
     fn test_register_instructions_for_y() {
-        let mut cpu = CPU::new();
         let tay = 0xa8;
         let tya = 0x98;
         let dey = 0x88;
         let iny = 0xc8;
+
+        let mut cpu = CPU::new();
         cpu.load_and_run(vec![dey, dey, iny, iny, iny, tya, tay]);
         assert_eq!(cpu.y, 1);
         assert_eq!(cpu.a, 1);
+    }
+
+    #[test]
+    fn test_compare_instructions() {
+        enum Register {
+            A,
+            X,
+            Y,
+        }
+
+        for (instruction, register) in [
+            (0xC9, Register::A),
+            (0xE0, Register::X),
+            (0xC0, Register::Y),
+        ] {
+            // equal to
+            let mut cpu = CPU::new();
+            cpu.load_and_run(vec![instruction, 0x00]);
+            assert_eq!(cpu.status, 0b0000_0011);
+
+            // greater than
+            let mut cpu = CPU::new();
+            cpu.load_and_run(vec![instruction, 0x01]);
+            assert_eq!(cpu.status, 0b0000_0000);
+
+            // less than
+            let mut cpu = CPU::new();
+            cpu.load(vec![instruction, 0x01]);
+            cpu.reset();
+            match register {
+                Register::A => cpu.a = 0x02,
+                Register::X => cpu.x = 0x02,
+                Register::Y => cpu.y = 0x02,
+            }
+            cpu.run();
+            assert_eq!(cpu.status, 0b0000_0001);
+
+            // ensure sets Negative flag, if applicable
+            let mut cpu = CPU::new();
+            cpu.load(vec![instruction, 0x81]);
+            cpu.reset();
+            match register {
+                Register::A => cpu.a = 0x81,
+                Register::X => cpu.x = 0x81,
+                Register::Y => cpu.y = 0x81,
+            }
+            cpu.run();
+            assert_eq!(cpu.status, 0b1000_0011);
+        }
+    }
+
+    #[test]
+    fn test_0xce_dec_absolute() {
+        let mut cpu = CPU::new();
+        let dec = 0xce;
+        let to_dec = 3;
+        let to_dec_addr = CPU_START as u16 + 4;
+        let dec_param_addr = CPU_START as u16 + 1;
+        cpu.load(vec![dec, 0x00, 0x00, 0x00, to_dec]);
+        cpu.reset();
+        cpu.mem_write_u16(dec_param_addr, to_dec_addr);
+        cpu.run();
+        assert_eq!(cpu.mem_read(to_dec_addr as u16), 2);
+    }
+
+    #[test]
+    fn test_0x49_eor_immediate() {
+        let mut cpu = CPU::new();
+        let eor = 0x49;
+        cpu.load(vec![eor, 0b1111_0000, 0x00]);
+        cpu.reset();
+        cpu.a = 0b0011_1100;
+        cpu.run();
+        assert_eq!(cpu.a, 0b1100_1100);
+        assert_eq!(cpu.status, 0b1000_0000);
     }
 }
