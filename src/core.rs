@@ -234,6 +234,50 @@ impl CPU {
                     self.pc += 1;
                 }
 
+                // LDX
+                0xA2 => {
+                    self.ldx(&AddressingMode::Immediate);
+                    self.pc += 1;
+                }
+                0xA6 => {
+                    self.ldx(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0xB6 => {
+                    self.ldx(&AddressingMode::ZeroPageY);
+                    self.pc += 1;
+                }
+                0xAE => {
+                    self.ldx(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0xBE => {
+                    self.ldx(&AddressingMode::AbsoluteY);
+                    self.pc += 2;
+                }
+
+                // LDY
+                0xA0 => {
+                    self.ldy(&AddressingMode::Immediate);
+                    self.pc += 1;
+                }
+                0xA4 => {
+                    self.ldy(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0xB4 => {
+                    self.ldy(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0xAC => {
+                    self.ldy(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0xBC => {
+                    self.ldy(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+
                 // STA
                 0x85 => {
                     self.sta(&AddressingMode::ZeroPage);
@@ -609,6 +653,24 @@ impl CPU {
         self.set_zero_and_negative_flags(self.a);
     }
 
+    /// LDX (LoaD X register)
+    fn ldx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let param = self.mem_read(addr);
+
+        self.x = param;
+        self.set_zero_and_negative_flags(self.a);
+    }
+
+    /// LDY (LoaD Y register)
+    fn ldy(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let param = self.mem_read(addr);
+
+        self.y = param;
+        self.set_zero_and_negative_flags(self.a);
+    }
+
     /// ORA (bitwise OR with Accumulator)
     fn ora(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
@@ -957,5 +1019,19 @@ mod tests {
                 CPU_START as u16 + consumed_bpl_op + 0 + consumed_brk_op
             );
         }
+    }
+
+    #[test]
+    fn test_ldx() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa2, 123]);
+        assert_eq!(cpu.x, 123);
+    }
+
+    #[test]
+    fn test_ldy() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa0, 123]);
+        assert_eq!(cpu.y, 123);
     }
 }
