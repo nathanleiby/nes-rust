@@ -365,6 +365,40 @@ impl CPU {
                     self.pc += 1;
                 }
 
+                // CMP
+                0xC9 => {
+                    self.cmp(&AddressingMode::Immediate);
+                    self.pc += 1;
+                }
+                0xC5 => {
+                    self.cmp(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0xD5 => {
+                    self.cmp(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0xCD => {
+                    self.cmp(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0xDD => {
+                    self.cmp(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+                0xD9 => {
+                    self.cmp(&AddressingMode::AbsoluteY);
+                    self.pc += 2;
+                }
+                0xC1 => {
+                    self.cmp(&AddressingMode::IndirectX);
+                    self.pc += 1;
+                }
+                0xD1 => {
+                    self.cmp(&AddressingMode::IndirectY);
+                    self.pc += 1;
+                }
+
                 // INC
                 0xE6 => {
                     self.inc(&AddressingMode::ZeroPage);
@@ -450,9 +484,8 @@ impl CPU {
         let (new_val, overflow) = self.a.overflowing_add(param);
         self.a = new_val;
 
-        // Affects Flags: N V Z C
         self.set_zero_and_negative_flags(new_val);
-        self.update_carry_flag(overflow);
+        self.update_flag(Flag::Carry, overflow);
         self.update_flag(Flag::Overflow, false); // TODO: not implemented
     }
 
@@ -478,6 +511,21 @@ impl CPU {
     /// BIT (test BITs)
     fn bit(&mut self, mode: &AddressingMode) {
         todo!()
+    }
+
+    /// CMP (CoMPare accumulator)
+    fn cmp(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let param = self.mem_read(addr);
+
+        let gte = self.a >= param;
+        self.update_flag(Flag::Carry, gte);
+
+        let eq = self.a == param;
+        self.update_flag(Flag::Zero, eq);
+
+        let sign = self.a >= 0x80;
+        self.update_flag(Flag::Negative, sign);
     }
 
     /// INC (INCrement memory)
@@ -535,10 +583,6 @@ impl CPU {
 
         let n = (val & 0b1000_0000) > 0;
         self.update_flag(Flag::Negative, n);
-    }
-
-    fn update_carry_flag(&mut self, on: bool) {
-        self.update_flag(Flag::Carry, on)
     }
 
     fn update_flag(&mut self, flag: Flag, on: bool) {
