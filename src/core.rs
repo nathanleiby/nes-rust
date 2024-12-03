@@ -339,6 +339,24 @@ impl CPU {
                     self.x = self.x.wrapping_add(1);
                     self.set_zero_and_negative_flags(self.x)
                 }
+
+                // Flag (Processor Status) Instructions
+
+                // CLC (CLear Carry)
+                0x18 => self.status &= 0b1111_1110,
+                // SEC (SEt Carry)
+                0x38 => self.status |= 0b0000_0001,
+                // CLI (CLear Interrupt)
+                0x58 => self.status &= 0b1111_1011,
+                // SEI (SEt Interrupt)
+                0x78 => self.status |= 0b0000_0100,
+                // CLV (CLear oVerflow)
+                0xB8 => self.status &= 0b1011_1111,
+                // CLD (CLear Decimal)
+                0xD8 => self.status &= 0b1111_0111,
+                // SED (SEt Decimal)
+                0xF8 => self.status |= 0b0000_1000,
+
                 _ => {
                     println!("Op {:#04x} not yet implemented", op);
                     todo!();
@@ -590,5 +608,22 @@ mod tests {
         cpu.run();
         assert_eq!(cpu.a, 0x00);
         assert_eq!(cpu.status, 0b0000_0010);
+    }
+
+    #[test]
+    fn test_flag_processor_status_instructions_set_flags() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0x38, 0x78, 0xF8]);
+        assert_eq!(cpu.status, 0b0000_1101);
+    }
+
+    #[test]
+    fn test_flag_processor_status_instructions_clear_flags() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x18, 0x58, 0xB8, 0xD8]);
+        cpu.reset();
+        cpu.status = 0xff;
+        cpu.run();
+        assert_eq!(cpu.status, 0b1011_0010);
     }
 }
