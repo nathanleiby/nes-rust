@@ -384,9 +384,7 @@ impl CPU {
                 }
 
                 // BRK
-                0x00 => {
-                    return;
-                }
+                0x00 => return,
 
                 // JSR
                 0x20 => {
@@ -418,19 +416,19 @@ impl CPU {
                 // Flag (Processor Status) Instructions
 
                 // CLC (CLear Carry)
-                0x18 => self.update_carry_flag(false),
+                0x18 => self.update_flag(Flag::Carry, false),
                 // SEC (SEt Carry)
-                0x38 => self.update_carry_flag(true),
+                0x38 => self.update_flag(Flag::Carry, true),
                 // CLI (CLear Interrupt)
-                0x58 => self.status &= 0b1111_1011,
+                0x58 => self.update_flag(Flag::Interrupt, false),
                 // SEI (SEt Interrupt)
-                0x78 => self.status |= 0b0000_0100,
+                0x78 => self.update_flag(Flag::Interrupt, true),
                 // CLV (CLear oVerflow)
-                0xB8 => self.status &= 0b1011_1111,
+                0xB8 => self.update_flag(Flag::Overflow, false),
                 // CLD (CLear Decimal)
-                0xD8 => self.status &= 0b1111_0111,
+                0xD8 => self.update_flag(Flag::Decimal, false),
                 // SED (SEt Decimal)
-                0xF8 => self.status |= 0b0000_1000,
+                0xF8 => self.update_flag(Flag::Decimal, true),
 
                 _ => {
                     println!("Op {:#04x} not yet implemented", op);
@@ -442,7 +440,54 @@ impl CPU {
 
     //
     // INSTRUCTIONS
+    // Order corresponds to spec here: http://www.6502.org/tutorials/6502opcodes.html
     //
+
+    /// ADC (ADd with Carry)
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let param = self.mem_read(addr);
+        let (new_val, overflow) = self.a.overflowing_add(param);
+        self.a = new_val;
+
+        // Affects Flags: N V Z C
+        self.set_zero_and_negative_flags(new_val);
+        self.update_carry_flag(overflow);
+        self.update_flag(Flag::Overflow, false); // TODO: not implemented
+    }
+
+    /// AND (bitwise AND with accumulator)
+    fn and(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let param = self.mem_read(addr);
+
+        self.a &= param;
+
+        self.set_zero_and_negative_flags(self.a);
+    }
+
+    /// ASL (Arithmetic Shift Left)
+    fn asl(&mut self, mode: &AddressingMode) {
+        // Affects Flags: N Z C
+        todo!()
+    }
+
+    /// Branch Instructions
+    // TODO
+
+    /// BIT (test BITs)
+    fn bit(&mut self, mode: &AddressingMode) {
+        todo!()
+    }
+
+    /// INC (INCrement memory)
+    fn inc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let old_val = self.mem_read(addr);
+        let new_val = old_val.wrapping_add(1);
+        self.mem_write(addr, new_val);
+        self.set_zero_and_negative_flags(new_val);
+    }
 
     fn inx(&mut self) {
         self.x = self.x.wrapping_add(1);
@@ -463,13 +508,6 @@ impl CPU {
         self.set_zero_and_negative_flags(self.a);
     }
 
-    /// STA (STore Accumulator)
-    fn sta(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-
-        self.mem_write(addr, self.a);
-    }
-
     /// ORA (bitwise OR with Accumulator)
     fn ora(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
@@ -480,36 +518,11 @@ impl CPU {
         self.set_zero_and_negative_flags(self.a);
     }
 
-    /// AND (bitwise AND with accumulator)
-    fn and(&mut self, mode: &AddressingMode) {
+    /// STA (STore Accumulator)
+    fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
-        let param = self.mem_read(addr);
 
-        self.a &= param;
-
-        self.set_zero_and_negative_flags(self.a);
-    }
-
-    /// INC (INCrement memory)
-    fn inc(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        let old_val = self.mem_read(addr);
-        let new_val = old_val.wrapping_add(1);
-        self.mem_write(addr, new_val);
-        self.set_zero_and_negative_flags(new_val);
-    }
-
-    /// ADC (ADd with Carry)
-    fn adc(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        let param = self.mem_read(addr);
-        let (new_val, overflow) = self.a.overflowing_add(param);
-        self.a = new_val;
-
-        // Affects Flags: N V Z C
-        self.set_zero_and_negative_flags(new_val);
-        self.update_carry_flag(overflow);
-        self.update_flag(Flag::Overflow, false); // TODO
+        self.mem_write(addr, self.a);
     }
 
     //
