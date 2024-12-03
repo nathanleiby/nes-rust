@@ -42,6 +42,16 @@ pub enum AddressingMode {
     None,
 }
 
+enum Flag {
+    Negative,
+    Overflow,
+    Break,
+    Decimal,
+    Interrupt,
+    Zero,
+    Carry,
+}
+
 // TODO: restore this later. It's hard-coded to support Snake right now
 // const CPU_START: u16 = 0x8000;
 const CPU_START: usize = 0x0600;
@@ -321,6 +331,40 @@ impl CPU {
                     self.pc += 1;
                 }
 
+                // ADC
+                0x69 => {
+                    self.adc(&AddressingMode::Immediate);
+                    self.pc += 1;
+                }
+                0x65 => {
+                    self.adc(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0x75 => {
+                    self.adc(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0x6D => {
+                    self.adc(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0x7D => {
+                    self.adc(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+                0x79 => {
+                    self.adc(&AddressingMode::AbsoluteY);
+                    self.pc += 2;
+                }
+                0x61 => {
+                    self.adc(&AddressingMode::IndirectX);
+                    self.pc += 1;
+                }
+                0x71 => {
+                    self.adc(&AddressingMode::IndirectY);
+                    self.pc += 1;
+                }
+
                 // INC
                 0xE6 => {
                     self.inc(&AddressingMode::ZeroPage);
@@ -374,9 +418,9 @@ impl CPU {
                 // Flag (Processor Status) Instructions
 
                 // CLC (CLear Carry)
-                0x18 => self.status &= 0b1111_1110,
+                0x18 => self.update_carry_flag(false),
                 // SEC (SEt Carry)
-                0x38 => self.status |= 0b0000_0001,
+                0x38 => self.update_carry_flag(true),
                 // CLI (CLear Interrupt)
                 0x58 => self.status &= 0b1111_1011,
                 // SEI (SEt Interrupt)
@@ -449,30 +493,77 @@ impl CPU {
     /// INC (INCrement memory)
     fn inc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
-        println!("get addr: #{:06x}", addr);
         let old_val = self.mem_read(addr);
-        println!("old_val: #{:06x}", old_val);
         let new_val = old_val.wrapping_add(1);
-        println!("new_val: #{:06x}", new_val);
         self.mem_write(addr, new_val);
         self.set_zero_and_negative_flags(new_val);
     }
 
+    /// ADC (ADd with Carry)
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let param = self.mem_read(addr);
+        let (new_val, overflow) = self.a.overflowing_add(param);
+        self.a = new_val;
+
+        // Affects Flags: N V Z C
+        self.set_zero_and_negative_flags(new_val);
+        self.update_carry_flag(overflow);
+        self.update_flag(Flag::Overflow, false); // TODO
+    }
+
+    //
+    // STATUS FLAGS
+    //
+
     fn set_zero_and_negative_flags(&mut self, val: u8) {
         let z = val == 0;
-        if z {
-            // set the zero flag
-            self.status |= 0b0000_0010;
-        } else {
-            self.status &= 0b1111_1101;
-        }
+        self.update_flag(Flag::Zero, z);
+
         let n = (val & 0b1000_0000) > 0;
-        if n {
-            // set the negative flag
-            self.status |= 0b1000_0000;
+        self.update_flag(Flag::Negative, n);
+    }
+
+    fn update_carry_flag(&mut self, on: bool) {
+        self.update_flag(Flag::Carry, on)
+    }
+
+    fn update_flag(&mut self, flag: Flag, on: bool) {
+        let base: u8 = 0b0000_0001;
+        let shift = match flag {
+            Flag::Carry => 0,
+            Flag::Zero => 1,
+            Flag::Interrupt => 2,
+            Flag::Decimal => 3,
+            Flag::Break => 4,
+            Flag::Overflow => 6,
+            Flag::Negative => 7,
+        };
+
+        let mask = base << shift;
+
+        if on {
+            self.status |= mask;
         } else {
-            self.status &= 0b0111_1111;
+            self.status &= mask ^ 0b1111_1111;
         }
+    }
+
+    fn get_flag(&self, flag: Flag) -> bool {
+        let base: u8 = 0b0000_0001; // Carry Flag
+        let shift = match flag {
+            Flag::Carry => 0,
+            Flag::Zero => 1,
+            Flag::Interrupt => 2,
+            Flag::Decimal => 3,
+            Flag::Break => 4,
+            Flag::Overflow => 6,
+            Flag::Negative => 7,
+        };
+
+        let mask = base << shift;
+        let val = self.status & mask;
+        val != 0
     }
 }
 
@@ -697,5 +788,25 @@ mod tests {
         cpu.mem_write_u16(inc_param_addr, to_inc_addr);
         cpu.run();
         assert_eq!(cpu.mem_read(to_inc_addr as u16), 0x02);
+    }
+
+    #[test]
+    fn test_0x69_adc_immediate() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0x69, 123]);
+        assert_eq!(cpu.a, 123);
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_0x69_adc_immediate_sets_carry_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 1]);
+        cpu.reset();
+        cpu.a = 255;
+        cpu.run();
+        assert_eq!(cpu.a, 0);
+        assert_eq!(cpu.get_flag(Flag::Zero), true);
+        assert_eq!(cpu.get_flag(Flag::Carry), true);
     }
 }
