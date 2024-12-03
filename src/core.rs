@@ -61,7 +61,7 @@ impl CPU {
     }
 
     fn stack_push(&mut self, val: u8) {
-        println!("stack_push ... val={:?} ({:#04x})", val, val);
+        log::debug!("stack_push ... val={:?} ({:#04x})", val, val);
         self.mem_write(0x0100 + self.sp as u16, val);
         self.sp -= 1;
     }
@@ -76,21 +76,14 @@ impl CPU {
     fn stack_pop(&mut self) -> u8 {
         self.sp += 1;
         let val = self.mem_read(0x0100 + self.sp as u16);
-        println!("stack_pop ... val={:?} ({:#04x})", val, val);
+        log::debug!("stack_pop ... val={:?} ({:#04x})", val, val);
         val
     }
 
     fn stack_pop_u16(&mut self) -> u16 {
-        println!("{:?}", self.memory[0x01ff]);
-        println!("{:?}", self.memory[0x01fe]);
-        println!("{:?}", self.memory[0x01fd]);
         let lo = self.stack_pop();
         let hi = self.stack_pop();
         let out = (hi as u16) << 8 | lo as u16;
-        println!(
-            "stack pop 16 .. hi = {:#06x}, lo = {:#06x}, out = {:#06x} to stack",
-            lo, hi, out
-        );
         out
     }
 
@@ -181,7 +174,7 @@ impl CPU {
             callback(self);
 
             let op = self.mem_read(self.pc);
-            println!("GOT OP: {:#06x}", op);
+            println!("got op: {:#06x}", op);
             self.pc += 1;
             match op {
                 // LDA
@@ -290,8 +283,8 @@ impl CPU {
                 // JSR
                 0x20 => {
                     let jump_dest = self.get_operand_address(&AddressingMode::Absolute);
-                    println!("jump dest={:?}", jump_dest);
-                    println!("saving pc={:?} ({:#06x}) to stack", self.pc, self.pc);
+                    self.pc += 2;
+
                     self.stack_push_u16(self.pc);
                     self.pc = jump_dest;
                 }
@@ -299,9 +292,6 @@ impl CPU {
                 // RTS
                 0x60 => {
                     let addr = self.stack_pop_u16();
-
-                    println!("return target ={:?} ({:#06x}) to stack", addr, addr);
-
                     self.pc = addr;
                 }
 
@@ -326,13 +316,25 @@ impl CPU {
     fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let param = self.mem_read(addr);
+
         self.a = param;
         self.set_zero_and_negative_flags(self.a);
     }
 
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
+
         self.mem_write(addr, self.a);
+    }
+
+    /// ORA (bitwise OR with Accumulator)
+    fn ora(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let param = self.mem_read(addr);
+
+        self.a |= param;
+
+        self.set_zero_and_negative_flags(self.a);
     }
 
     fn set_zero_and_negative_flags(&mut self, val: u8) {
@@ -351,17 +353,6 @@ impl CPU {
             self.status &= 0b0111_1111;
         }
     }
-
-    /// ORA (bitwise OR with Accumulator)
-    fn ora(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        let param = self.mem_read(addr);
-        self.a |= param;
-
-        self.set_zero_and_negative_flags(self.a);
-    }
-
-    // fn set_status_flag(&mut self, )
 }
 
 #[cfg(test)]
@@ -523,8 +514,6 @@ mod tests {
         cpu.load(vec![jmp_opcode]);
         cpu.reset();
 
-        // TODO: I'm not sure why the jump_dest matters here, but it seems to cause test to pass/fail
-        // let jump_dest: u16 = (CPU_START as u16) + 5;
         let jump_dest: u16 = (CPU_START as u16) + 123;
         cpu.mem_write_u16((CPU_START as u16) + 1, jump_dest);
 
@@ -532,13 +521,19 @@ mod tests {
 
         cpu.run();
         // +4 =
+        // [0    1     2       3  ]
         // [jmp, addr, addr+1, brk] .. and +1 as last pc+1 after brek
         assert_eq!(cpu.pc, (CPU_START as u16) + 4);
     }
 
     #[test]
-    fn test_ora() {
-        todo!()
-        // assert_eq!(cpu.status, 0b0000_0000);
+    fn test_0x09_ora_immediate() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x09, 0x0f, 0x00]);
+        cpu.reset();
+        cpu.a = 0xf0;
+        cpu.run();
+        assert_eq!(cpu.a, 0xff);
+        assert_eq!(cpu.status, 0b1000_0000);
     }
 }
