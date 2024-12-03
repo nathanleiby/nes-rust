@@ -300,6 +300,28 @@ impl CPU {
                     self.pc += 2;
                 }
 
+                // ASL
+                0x0A => {
+                    self.asl(&AddressingMode::None);
+                    self.pc += 1;
+                }
+                0x06 => {
+                    self.asl(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0x16 => {
+                    self.asl(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0x0E => {
+                    self.asl(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0x1E => {
+                    self.asl(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+
                 // NOP
                 0xEA => self.nop(),
 
@@ -659,8 +681,25 @@ impl CPU {
 
     /// ASL (Arithmetic Shift Left)
     fn asl(&mut self, mode: &AddressingMode) {
-        // Affects Flags: N Z C
-        todo!()
+        // I've overloaded the addressing mode idea to handle accumlator variant
+        if mode == &AddressingMode::None {
+            let old_val = self.a;
+            let new_val = self.a << 1;
+
+            self.a = new_val;
+
+            self.set_zero_and_negative_flags(new_val);
+            self.update_flag(Flag::Carry, old_val & 0b1000_0000 > 0);
+        } else {
+            let addr = self.get_operand_address(mode);
+            let old_val = self.mem_read(addr);
+            let new_val = old_val << 1;
+
+            self.mem_write(addr, new_val);
+
+            self.set_zero_and_negative_flags(new_val);
+            self.update_flag(Flag::Carry, old_val & 0b1000_0000 > 0);
+        }
     }
 
     // Branch Instructions //
@@ -850,7 +889,7 @@ impl CPU {
 
     /// LSR (Logical Shift Right)
     fn lsr(&mut self, mode: &AddressingMode) {
-        // I've overloaded the addressing mode idea to handle accumlator variant of
+        // I've overloaded the addressing mode idea to handle accumlator variant
         if mode == &AddressingMode::None {
             let old_val = self.a;
             let new_val = self.a >> 1;
@@ -1370,5 +1409,30 @@ mod tests {
         cpu.run();
         assert_eq!(cpu.a, 0b1100_1100);
         assert_eq!(cpu.status, 0b1000_0000);
+    }
+
+    #[test]
+    fn test_0x0a_asl_shifts_accumulator() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x0a]);
+        cpu.reset();
+        cpu.a = 0b1000_1001;
+        cpu.run();
+        assert_eq!(cpu.a, 0b0001_0010);
+        assert_eq!(cpu.get_flag(Flag::Carry), true);
+    }
+
+    #[test]
+    fn test_0x0e_asl_shifts_absolute() {
+        let mut cpu = CPU::new();
+        let to_lsr = 0b1000_1001;
+        let to_lsr_addr = CPU_START as u16 + 4;
+        let lsr_param_addr = CPU_START as u16 + 1;
+        cpu.load(vec![0x0e, 0x00, 0x00, 0x00, to_lsr]);
+        cpu.reset();
+        cpu.mem_write_u16(lsr_param_addr, to_lsr_addr);
+        cpu.run();
+        assert_eq!(cpu.mem_read(to_lsr_addr as u16), 0b0001_0010);
+        assert_eq!(cpu.get_flag(Flag::Carry), true);
     }
 }
