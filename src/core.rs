@@ -93,7 +93,6 @@ impl CPU {
             AddressingMode::Absolute => self.mem_read_u16(self.pc),
             AddressingMode::AbsoluteX => self.mem_read_u16(self.pc).wrapping_add(self.x as u16),
             AddressingMode::AbsoluteY => self.mem_read_u16(self.pc).wrapping_add(self.y as u16),
-            // TODO: is basic Indirect supported
             AddressingMode::IndirectX => {
                 // "Indexed indirect"
                 let base = self.mem_read(self.pc);
@@ -137,18 +136,75 @@ impl CPU {
             let op = self.mem_read(self.pc);
             self.pc += 1;
             match op {
-                // LDA - load next byte into register A
+                // LDA
                 0xA9 => {
-                    let param = self.mem_read(self.pc);
-                    self.a = param;
+                    self.lda(&AddressingMode::Immediate);
                     self.pc += 1;
-
-                    self.set_zero_and_negative_flags(self.a);
                 }
+                0xA5 => {
+                    self.lda(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0xB5 => {
+                    self.lda(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0xAD => {
+                    self.lda(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0xBD => {
+                    self.lda(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+                0xB9 => {
+                    self.lda(&AddressingMode::AbsoluteY);
+                    self.pc += 2;
+                }
+                0xA1 => {
+                    self.lda(&AddressingMode::IndirectX);
+                    self.pc += 1;
+                }
+                0xB1 => {
+                    self.lda(&AddressingMode::IndirectY);
+                    self.pc += 1;
+                }
+
+                // STA
+                0x85 => {
+                    self.sta(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0x95 => {
+                    self.sta(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0x8D => {
+                    self.sta(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0x9D => {
+                    self.sta(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+                0x99 => {
+                    self.sta(&AddressingMode::AbsoluteY);
+                    self.pc += 2;
+                }
+                0x81 => {
+                    self.sta(&AddressingMode::IndirectX);
+                    self.pc += 1;
+                }
+                0x91 => {
+                    self.sta(&AddressingMode::IndirectY);
+                    self.pc += 1;
+                }
+
                 // BRK
                 0x00 => {
                     return;
                 }
+
                 // TAX - transfer A to X
                 0xAA => {
                     self.x = self.a;
@@ -162,6 +218,18 @@ impl CPU {
                 _ => todo!(),
             }
         }
+    }
+
+    fn lda(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let param = self.mem_read(addr);
+        self.a = param;
+        self.set_zero_and_negative_flags(self.a);
+    }
+
+    fn sta(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.mem_write(addr, self.a);
     }
 
     fn set_zero_and_negative_flags(&mut self, val: u8) {
@@ -189,7 +257,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_0xa0_lda_load_nonzero() {
+    fn test_0xa0_lda_immediate_nonzero() {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0x55, 0x00]);
         assert_eq!(cpu.a, 0x55);
@@ -197,11 +265,87 @@ mod tests {
     }
 
     #[test]
-    fn test_0xa9_lda_load_zero() {
+    fn test_0xa9_lda_immediate_load_zero() {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
         assert_eq!(cpu.a, 0x00);
         assert_eq!(cpu.status, 0b0000_0010);
+    }
+
+    #[test]
+    fn test_lda_from_memory() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0x55);
+        cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
+
+        assert_eq!(cpu.a, 0x55);
+    }
+
+    #[test]
+    fn test_lda_absolute() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x2001, 0x99);
+        cpu.load_and_run(vec![0xad, 0x01, 0x20, 0x00]);
+
+        assert_eq!(cpu.a, 0x99);
+    }
+
+    #[test]
+    fn test_sta_zero_page() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x85, 0x10, 0x00]);
+        cpu.reset();
+        cpu.a = 123;
+        cpu.run();
+
+        assert_eq!(cpu.memory_map[0x10], 123);
+    }
+
+    #[test]
+    fn test_sta_zero_page_x() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x95, 0x10, 0x00]);
+        cpu.reset();
+        cpu.x = 1;
+        cpu.memory_map[0x11] = 0x20;
+        cpu.a = 123;
+        cpu.run();
+
+        assert_eq!(cpu.memory_map[0x11], 123);
+    }
+
+    #[test]
+    fn test_addressing_modes() {
+        let pc = 0x11;
+        for (mode, expected) in vec![
+            (AddressingMode::Immediate, pc),
+            (AddressingMode::ZeroPage, 0x22),
+            (AddressingMode::ZeroPageX, 0x22 + 4),
+            (AddressingMode::ZeroPageY, 0x22 + 2),
+            (AddressingMode::Absolute, 0x3322),
+            (AddressingMode::AbsoluteX, 0x3322 + 4),
+            (AddressingMode::AbsoluteY, 0x3322 + 2),
+            (AddressingMode::IndirectX, 0x11),
+            (AddressingMode::IndirectY, 0x5533 + 2),
+        ] {
+            let mut cpu = CPU::new();
+            cpu.pc = pc;
+            cpu.memory_map[0x11] = 0x22;
+            cpu.memory_map[0x12] = 0x33;
+            cpu.x = 4;
+            cpu.y = 2;
+
+            // for IndirectX
+            cpu.memory_map[0x22 + 4] = 0x11;
+
+            // for IndirectY
+            cpu.memory_map[0x22] = 0x33;
+            cpu.memory_map[0x23] = 0x55;
+
+            let actual = cpu.get_operand_address(&mode);
+            println!("Testing addressing mode = {:?}", mode);
+            assert_eq!(actual, expected);
+        }
     }
 
     #[test]
