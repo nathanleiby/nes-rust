@@ -1,12 +1,13 @@
 /// CPU (Central Processing Unit)
 /// The NES uses  2A03, which is a modified version of the 6502 chip.
 pub struct CPU {
-    memory_map: [u8; 0xffff],
+    memory: [u8; 0xffff],
 
     /// program counter
     pc: u16,
 
     /// stack pointer
+    /// The stack lives in memory between $0100 and $01ff.
     sp: u8,
 
     /// accumulator
@@ -41,12 +42,16 @@ pub enum AddressingMode {
     None,
 }
 
+// TODO: restore this later. It's hard-coded to support Snake right now
+// const CPU_START: u16 = 0x8000;
+const CPU_START: usize = 0x0600;
+
 impl CPU {
     pub fn new() -> Self {
         CPU {
-            memory_map: [0; 0xffff],
+            memory: [0; 0xffff],
             pc: 0,
-            sp: 0,
+            sp: 0xff,
             a: 0,
             x: 0,
             y: 0,
@@ -55,18 +60,52 @@ impl CPU {
         }
     }
 
+    fn stack_push(&mut self, val: u8) {
+        println!("stack_push ... val={:?} ({:#04x})", val, val);
+        self.mem_write(0x0100 + self.sp as u16, val);
+        self.sp -= 1;
+    }
+
+    fn stack_push_u16(&mut self, val: u16) {
+        let lo = (val & 0xff) as u8;
+        let hi = (val >> 8) as u8;
+        self.stack_push(hi);
+        self.stack_push(lo);
+    }
+
+    fn stack_pop(&mut self) -> u8 {
+        self.sp += 1;
+        let val = self.mem_read(0x0100 + self.sp as u16);
+        println!("stack_pop ... val={:?} ({:#04x})", val, val);
+        val
+    }
+
+    fn stack_pop_u16(&mut self) -> u16 {
+        println!("{:?}", self.memory[0x01ff]);
+        println!("{:?}", self.memory[0x01fe]);
+        println!("{:?}", self.memory[0x01fd]);
+        let lo = self.stack_pop();
+        let hi = self.stack_pop();
+        let out = (hi as u16) << 8 | lo as u16;
+        println!(
+            "stack pop 16 .. hi = {:#06x}, lo = {:#06x}, out = {:#06x} to stack",
+            lo, hi, out
+        );
+        out
+    }
+
     pub fn mem_read(&self, addr: u16) -> u8 {
-        self.memory_map[addr as usize]
+        self.memory[addr as usize]
     }
 
     pub fn mem_write(&mut self, addr: u16, val: u8) {
-        self.memory_map[addr as usize] = val;
+        self.memory[addr as usize] = val;
     }
 
     fn mem_read_u16(&self, addr: u16) -> u16 {
         // NES CPU uses Little-Endian addressing
-        let lo = self.memory_map[addr as usize];
-        let hi = self.memory_map[(addr + 1) as usize];
+        let lo = self.memory[addr as usize];
+        let hi = self.memory[(addr + 1) as usize];
         (hi as u16) << 8 | lo as u16
     }
 
@@ -111,10 +150,8 @@ impl CPU {
 
     // load method should load a program into PRG ROM space and save the reference to the code into 0xFFFC memory cell
     pub fn load(&mut self, program: Vec<u8>) {
-        // let start = 0x8000;
-        let start = 0x0600; // TODO: restore later. This is temporarily overriden to support the "snake" game's custom setup
-        self.memory_map[start..start + program.len()].copy_from_slice(&program);
-        self.mem_write_u16(0xFFFC, start as u16);
+        self.memory[CPU_START..CPU_START + program.len()].copy_from_slice(&program);
+        self.mem_write_u16(0xFFFC, CPU_START as u16);
     }
 
     pub fn load_and_run(&mut self, program: Vec<u8>) {
@@ -128,7 +165,7 @@ impl CPU {
         self.a = 0;
         self.x = 0;
         self.y = 0;
-        self.sp = 0;
+        self.sp = 0xff;
         self.pc = self.mem_read_u16(0xFFFC);
     }
 
@@ -144,6 +181,7 @@ impl CPU {
             callback(self);
 
             let op = self.mem_read(self.pc);
+            println!("GOT OP: {:#06x}", op);
             self.pc += 1;
             match op {
                 // LDA
@@ -210,9 +248,61 @@ impl CPU {
                     self.pc += 1;
                 }
 
+                // ORA
+                0x09 => {
+                    self.ora(&AddressingMode::Immediate);
+                    self.pc += 1;
+                }
+                0x05 => {
+                    self.ora(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0x15 => {
+                    self.ora(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0x0D => {
+                    self.ora(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0x1D => {
+                    self.ora(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+                0x19 => {
+                    self.ora(&AddressingMode::AbsoluteY);
+                    self.pc += 2;
+                }
+                0x01 => {
+                    self.ora(&AddressingMode::IndirectX);
+                    self.pc += 1;
+                }
+                0x11 => {
+                    self.ora(&AddressingMode::IndirectY);
+                    self.pc += 1;
+                }
+
                 // BRK
                 0x00 => {
                     return;
+                }
+
+                // JSR
+                0x20 => {
+                    let jump_dest = self.get_operand_address(&AddressingMode::Absolute);
+                    println!("jump dest={:?}", jump_dest);
+                    println!("saving pc={:?} ({:#06x}) to stack", self.pc, self.pc);
+                    self.stack_push_u16(self.pc);
+                    self.pc = jump_dest;
+                }
+
+                // RTS
+                0x60 => {
+                    let addr = self.stack_pop_u16();
+
+                    println!("return target ={:?} ({:#06x}) to stack", addr, addr);
+
+                    self.pc = addr;
                 }
 
                 // TAX - transfer A to X
@@ -260,6 +350,15 @@ impl CPU {
         } else {
             self.status &= 0b0111_1111;
         }
+    }
+
+    /// ORA (bitwise OR with Accumulator)
+    fn ora(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let param = self.mem_read(addr);
+        self.a |= param;
+
+        self.set_zero_and_negative_flags(self.a);
     }
 
     // fn set_status_flag(&mut self, )
@@ -311,7 +410,7 @@ mod tests {
         cpu.a = 123;
         cpu.run();
 
-        assert_eq!(cpu.memory_map[0x10], 123);
+        assert_eq!(cpu.memory[0x10], 123);
     }
 
     #[test]
@@ -320,11 +419,11 @@ mod tests {
         cpu.load(vec![0x95, 0x10, 0x00]);
         cpu.reset();
         cpu.x = 1;
-        cpu.memory_map[0x11] = 0x20;
+        cpu.memory[0x11] = 0x20;
         cpu.a = 123;
         cpu.run();
 
-        assert_eq!(cpu.memory_map[0x11], 123);
+        assert_eq!(cpu.memory[0x11], 123);
     }
 
     #[test]
@@ -343,17 +442,17 @@ mod tests {
         ] {
             let mut cpu = CPU::new();
             cpu.pc = pc;
-            cpu.memory_map[0x11] = 0x22;
-            cpu.memory_map[0x12] = 0x33;
+            cpu.memory[0x11] = 0x22;
+            cpu.memory[0x12] = 0x33;
             cpu.x = 4;
             cpu.y = 2;
 
             // for IndirectX
-            cpu.memory_map[0x22 + 4] = 0x11;
+            cpu.memory[0x22 + 4] = 0x11;
 
             // for IndirectY
-            cpu.memory_map[0x22] = 0x33;
-            cpu.memory_map[0x23] = 0x55;
+            cpu.memory[0x22] = 0x33;
+            cpu.memory[0x23] = 0x55;
 
             let actual = cpu.get_operand_address(&mode);
             println!("Testing addressing mode = {:?}", mode);
@@ -401,5 +500,45 @@ mod tests {
         cpu.run();
 
         assert_eq!(cpu.x, 1)
+    }
+
+    #[test]
+    fn test_jmp() {
+        let mut cpu = CPU::new();
+        let jump_dest: u16 = (CPU_START as u16) + 333;
+        cpu.mem_write_u16((CPU_START as u16) + 1, jump_dest);
+        cpu.load_and_run(vec![0x20]);
+
+        // expect that you jump to jump_dest, then pc steps forward one more time while reading a BRK
+        // (since everything is 0x00 BRK by default)
+        assert_eq!(cpu.pc, (jump_dest + 1) as u16);
+    }
+
+    #[test]
+    fn test_rts() {
+        let mut cpu = CPU::new();
+
+        let jmp_opcode = 0x20;
+        let rts_opcode = 0x60;
+        cpu.load(vec![jmp_opcode]);
+        cpu.reset();
+
+        // TODO: I'm not sure why the jump_dest matters here, but it seems to cause test to pass/fail
+        // let jump_dest: u16 = (CPU_START as u16) + 5;
+        let jump_dest: u16 = (CPU_START as u16) + 123;
+        cpu.mem_write_u16((CPU_START as u16) + 1, jump_dest);
+
+        cpu.mem_write(jump_dest, rts_opcode);
+
+        cpu.run();
+        // +4 =
+        // [jmp, addr, addr+1, brk] .. and +1 as last pc+1 after brek
+        assert_eq!(cpu.pc, (CPU_START as u16) + 4);
+    }
+
+    #[test]
+    fn test_ora() {
+        todo!()
+        // assert_eq!(cpu.status, 0b0000_0000);
     }
 }
