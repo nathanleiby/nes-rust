@@ -275,6 +275,40 @@ impl CPU {
                     self.pc += 1;
                 }
 
+                // AND
+                0x29 => {
+                    self.and(&AddressingMode::Immediate);
+                    self.pc += 1;
+                }
+                0x25 => {
+                    self.and(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0x35 => {
+                    self.and(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0x2D => {
+                    self.and(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0x3D => {
+                    self.and(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+                0x39 => {
+                    self.and(&AddressingMode::AbsoluteY);
+                    self.pc += 2;
+                }
+                0x21 => {
+                    self.and(&AddressingMode::IndirectX);
+                    self.pc += 1;
+                }
+                0x31 => {
+                    self.and(&AddressingMode::IndirectY);
+                    self.pc += 1;
+                }
+
                 // BRK
                 0x00 => {
                     return;
@@ -333,6 +367,16 @@ impl CPU {
         let param = self.mem_read(addr);
 
         self.a |= param;
+
+        self.set_zero_and_negative_flags(self.a);
+    }
+
+    /// AND (bitwise AND with accumulator)
+    fn and(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let param = self.mem_read(addr);
+
+        self.a &= param;
 
         self.set_zero_and_negative_flags(self.a);
     }
@@ -535,5 +579,16 @@ mod tests {
         cpu.run();
         assert_eq!(cpu.a, 0xff);
         assert_eq!(cpu.status, 0b1000_0000);
+    }
+
+    #[test]
+    fn test_0x29_and_immediate() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x29, 0x0f, 0x00]);
+        cpu.reset();
+        cpu.a = 0xf0;
+        cpu.run();
+        assert_eq!(cpu.a, 0x00);
+        assert_eq!(cpu.status, 0b0000_0010);
     }
 }
