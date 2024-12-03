@@ -28,7 +28,7 @@ pub struct CPU {
     cycles: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum AddressingMode {
     Immediate,
     ZeroPage,
@@ -277,6 +277,31 @@ impl CPU {
                     self.ldy(&AddressingMode::AbsoluteX);
                     self.pc += 2;
                 }
+
+                // LSR
+                0x4A => {
+                    self.lsr(&AddressingMode::None);
+                    self.pc += 1;
+                }
+                0x46 => {
+                    self.lsr(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0x56 => {
+                    self.lsr(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0x4E => {
+                    self.lsr(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0x5E => {
+                    self.lsr(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+
+                // NOP
+                0xEA => self.nop(),
 
                 // STA
                 0x85 => {
@@ -671,6 +696,31 @@ impl CPU {
         self.set_zero_and_negative_flags(self.a);
     }
 
+    /// LSR (Logical Shift Right)
+    fn lsr(&mut self, mode: &AddressingMode) {
+        if mode == &AddressingMode::None {
+            let old_val = self.a;
+            let new_val = self.a >> 1;
+
+            self.a = new_val;
+
+            self.set_zero_and_negative_flags(new_val);
+            self.update_flag(Flag::Carry, old_val & 0b0000_0001 > 0);
+        } else {
+            let addr = self.get_operand_address(mode);
+            let old_val = self.mem_read(addr);
+            let new_val = old_val >> 1;
+
+            self.mem_write(addr, new_val);
+
+            self.set_zero_and_negative_flags(new_val);
+            self.update_flag(Flag::Carry, old_val & 0b0000_0001 > 0);
+        }
+    }
+
+    /// NOP (No OPeration)
+    fn nop(&mut self) {}
+
     /// ORA (bitwise OR with Accumulator)
     fn ora(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
@@ -1033,5 +1083,39 @@ mod tests {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa0, 123]);
         assert_eq!(cpu.y, 123);
+    }
+
+    #[test]
+    fn test_0x4a_lsr_shifts_accumulator() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x4a]);
+        cpu.reset();
+        cpu.a = 0b1000_1001;
+        cpu.run();
+        assert_eq!(cpu.a, 0b0100_0100);
+        assert_eq!(cpu.get_flag(Flag::Carry), true);
+    }
+
+    #[test]
+    fn test_0x4e_lsr_shifts_absolute() {
+        let mut cpu = CPU::new();
+        let to_lsr = 0b1000_1001;
+        let to_lsr_addr = CPU_START as u16 + 4;
+        let lsr_param_addr = CPU_START as u16 + 1;
+        cpu.load(vec![0x4e, 0x00, 0x00, 0x00, to_lsr]);
+        cpu.reset();
+        cpu.mem_write_u16(lsr_param_addr, to_lsr_addr);
+        cpu.run();
+        assert_eq!(cpu.mem_read(to_lsr_addr as u16), 0b0100_0100);
+        assert_eq!(cpu.get_flag(Flag::Carry), true);
+    }
+
+    #[test]
+    fn test_0xea_nop() {
+        let mut cpu = CPU::new();
+        let program = vec![0xea, 0xea, 0xea, 0xea, 0x00];
+        cpu.load_and_run(program.clone());
+        let end = (CPU_START + program.len()) as u16;
+        assert_eq!(cpu.pc, end);
     }
 }
