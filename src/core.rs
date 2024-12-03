@@ -517,7 +517,14 @@ impl CPU {
 
                 // Register Instructions
                 0xAA => self.tax(),
+                0x8A => self.txa(),
+                0xCA => self.dex(),
                 0xE8 => self.inx(),
+                0xA8 => self.tay(),
+                0x98 => self.tya(),
+                0x88 => self.dey(),
+                0xC8 => self.iny(),
+
                 // TAX (Transfer A to X)    $AA
                 // TXA (Transfer X to A)    $8A
                 // DEX (DEcrement X)        $CA
@@ -585,7 +592,8 @@ impl CPU {
         todo!()
     }
 
-    /// Branch Instructions
+    // Branch Instructions //
+
     fn branch_on_flag(&mut self, flag: Flag, is_set: bool) {
         // TODO: this reads the operand from memory the same way as AddressingMode::Immediate...
         // though the docs call this "Relative" addressing due to its use as an offset/displacement.
@@ -659,14 +667,45 @@ impl CPU {
         self.set_zero_and_negative_flags(new_val);
     }
 
-    fn inx(&mut self) {
-        self.x = self.x.wrapping_add(1);
-        self.set_zero_and_negative_flags(self.x)
-    }
-
+    // Register instructions //
     fn tax(&mut self) {
         self.x = self.a;
         self.set_zero_and_negative_flags(self.x);
+    }
+
+    fn txa(&mut self) {
+        self.a = self.x;
+        self.set_zero_and_negative_flags(self.a);
+    }
+
+    fn dex(&mut self) {
+        self.x = self.x.wrapping_sub(1);
+        self.set_zero_and_negative_flags(self.x);
+    }
+
+    fn inx(&mut self) {
+        self.x = self.x.wrapping_add(1);
+        self.set_zero_and_negative_flags(self.x);
+    }
+
+    fn tay(&mut self) {
+        self.y = self.a;
+        self.set_zero_and_negative_flags(self.y);
+    }
+
+    fn tya(&mut self) {
+        self.a = self.y;
+        self.set_zero_and_negative_flags(self.a);
+    }
+
+    fn dey(&mut self) {
+        self.y = self.y.wrapping_sub(1);
+        self.set_zero_and_negative_flags(self.y);
+    }
+
+    fn iny(&mut self) {
+        self.y = self.y.wrapping_add(1);
+        self.set_zero_and_negative_flags(self.y);
     }
 
     /// LDA (LoaD Accumulator)
@@ -1117,5 +1156,29 @@ mod tests {
         cpu.load_and_run(program.clone());
         let end = (CPU_START + program.len()) as u16;
         assert_eq!(cpu.pc, end);
+    }
+
+    #[test]
+    fn test_register_instructions_for_x() {
+        let mut cpu = CPU::new();
+        let tax = 0xaa;
+        let txa = 0x8a;
+        let dex = 0xca;
+        let inx = 0xe8;
+        cpu.load_and_run(vec![dex, dex, inx, inx, inx, txa, tax]);
+        assert_eq!(cpu.x, 1);
+        assert_eq!(cpu.a, 1);
+    }
+
+    #[test]
+    fn test_register_instructions_for_y() {
+        let mut cpu = CPU::new();
+        let tay = 0xa8;
+        let tya = 0x98;
+        let dey = 0x88;
+        let iny = 0xc8;
+        cpu.load_and_run(vec![dey, dey, iny, iny, iny, tya, tay]);
+        assert_eq!(cpu.y, 1);
+        assert_eq!(cpu.a, 1);
     }
 }
