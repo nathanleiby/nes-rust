@@ -20,7 +20,7 @@ pub struct CPU {
     y: u8,
 
     /// processor status register
-    ///This is a set of flags
+    /// This is a set of flags
     // TODO: explore flagset representation
     status: u8,
 
@@ -60,6 +60,10 @@ impl CPU {
         }
     }
 
+    //
+    // STACK
+    //
+
     fn stack_push(&mut self, val: u8) {
         log::debug!("stack_push ... val={:?} ({:#04x})", val, val);
         self.mem_write(0x0100 + self.sp as u16, val);
@@ -86,6 +90,10 @@ impl CPU {
         let out = (hi as u16) << 8 | lo as u16;
         out
     }
+
+    //
+    // MEMORY
+    //
 
     pub fn mem_read(&self, addr: u16) -> u8 {
         self.memory[addr as usize]
@@ -140,6 +148,10 @@ impl CPU {
             AddressingMode::None => panic!("mode {:?} is not supported", mode),
         }
     }
+
+    //
+    // MAIN
+    //
 
     // load method should load a program into PRG ROM space and save the reference to the code into 0xFFFC memory cell
     pub fn load(&mut self, program: Vec<u8>) {
@@ -309,6 +321,24 @@ impl CPU {
                     self.pc += 1;
                 }
 
+                // INC
+                0xE6 => {
+                    self.inc(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0xF6 => {
+                    self.inc(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0xEE => {
+                    self.inc(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0xFE => {
+                    self.inc(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+
                 // BRK
                 0x00 => {
                     return;
@@ -329,16 +359,17 @@ impl CPU {
                     self.pc = addr;
                 }
 
-                // TAX - transfer A to X
-                0xAA => {
-                    self.x = self.a;
-                    self.set_zero_and_negative_flags(self.x);
-                }
-                // INX  - increment X
-                0xE8 => {
-                    self.x = self.x.wrapping_add(1);
-                    self.set_zero_and_negative_flags(self.x)
-                }
+                // Register Instructions
+                0xAA => self.tax(),
+                0xE8 => self.inx(),
+                // TAX (Transfer A to X)    $AA
+                // TXA (Transfer X to A)    $8A
+                // DEX (DEcrement X)        $CA
+                // INX (INcrement X)        $E8
+                // TAY (Transfer A to Y)    $A8
+                // TYA (Transfer Y to A)    $98
+                // DEY (DEcrement Y)        $88
+                // INY (INcrement Y)        $C8
 
                 // Flag (Processor Status) Instructions
 
@@ -365,6 +396,21 @@ impl CPU {
         }
     }
 
+    //
+    // INSTRUCTIONS
+    //
+
+    fn inx(&mut self) {
+        self.x = self.x.wrapping_add(1);
+        self.set_zero_and_negative_flags(self.x)
+    }
+
+    fn tax(&mut self) {
+        self.x = self.a;
+        self.set_zero_and_negative_flags(self.x);
+    }
+
+    /// LDA (LoaD Accumulator)
     fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let param = self.mem_read(addr);
@@ -373,6 +419,7 @@ impl CPU {
         self.set_zero_and_negative_flags(self.a);
     }
 
+    /// STA (STore Accumulator)
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
 
@@ -397,6 +444,18 @@ impl CPU {
         self.a &= param;
 
         self.set_zero_and_negative_flags(self.a);
+    }
+
+    /// INC (INCrement memory)
+    fn inc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        println!("get addr: #{:06x}", addr);
+        let old_val = self.mem_read(addr);
+        println!("old_val: #{:06x}", old_val);
+        let new_val = old_val.wrapping_add(1);
+        println!("new_val: #{:06x}", new_val);
+        self.mem_write(addr, new_val);
+        self.set_zero_and_negative_flags(new_val);
     }
 
     fn set_zero_and_negative_flags(&mut self, val: u8) {
@@ -625,5 +684,18 @@ mod tests {
         cpu.status = 0xff;
         cpu.run();
         assert_eq!(cpu.status, 0b1011_0010);
+    }
+
+    #[test]
+    fn test_0xee_inc_absolute() {
+        let mut cpu = CPU::new();
+        let to_inc = 0x01;
+        let to_inc_addr = CPU_START as u16 + 4;
+        let inc_param_addr = CPU_START as u16 + 1;
+        cpu.load(vec![0xee, 0x00, 0x00, 0x00, to_inc]);
+        cpu.reset();
+        cpu.mem_write_u16(inc_param_addr, to_inc_addr);
+        cpu.run();
+        assert_eq!(cpu.mem_read(to_inc_addr as u16), 0x02);
     }
 }
