@@ -1,8 +1,10 @@
+use core::Mem;
 use core::CPU;
 use std::error::Error;
 use std::thread::sleep;
 use std::time::Duration;
 
+mod bus;
 mod core;
 
 use rand::random;
