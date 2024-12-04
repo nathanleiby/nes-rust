@@ -40,6 +40,7 @@ pub enum AddressingMode {
     IndirectX,
     IndirectY,
     None,
+    Indirect,
 }
 
 #[derive(Copy, Clone)]
@@ -144,6 +145,11 @@ impl CPU {
             AddressingMode::Absolute => self.mem_read_u16(self.pc),
             AddressingMode::AbsoluteX => self.mem_read_u16(self.pc).wrapping_add(self.x as u16),
             AddressingMode::AbsoluteY => self.mem_read_u16(self.pc).wrapping_add(self.y as u16),
+            AddressingMode::Indirect => {
+                let base = self.mem_read(self.pc);
+                let target = self.mem_read_zero_page_wrapping(base); // indirect
+                target
+            }
             AddressingMode::IndirectX => {
                 // "Indexed indirect"
                 let base = self.mem_read(self.pc);
@@ -197,7 +203,16 @@ impl CPU {
             callback(self);
 
             let op = self.mem_read(self.pc);
-            println!("got op: {:#06x}", op);
+            println!(
+                "pc={:#06x} (program idx={:03}) op={:#04x}",
+                self.pc,
+                self.pc - CPU_START as u16,
+                op
+            );
+            println!(
+                "\ta={:#06x} x={:#06x} y={:#06x} flags={:#010b}",
+                self.a, self.x, self.y, self.status,
+            );
             self.pc += 1;
             match op {
                 // LDA
@@ -281,7 +296,7 @@ impl CPU {
                 // LSR
                 0x4A => {
                     self.lsr(&AddressingMode::None);
-                    self.pc += 1;
+                    // BUG
                 }
                 0x46 => {
                     self.lsr(&AddressingMode::ZeroPage);
@@ -303,7 +318,6 @@ impl CPU {
                 // ASL
                 0x0A => {
                     self.asl(&AddressingMode::None);
-                    self.pc += 1;
                 }
                 0x06 => {
                     self.asl(&AddressingMode::ZeroPage);
@@ -605,15 +619,71 @@ impl CPU {
                 // JSR
                 0x20 => {
                     let jump_dest = self.get_operand_address(&AddressingMode::Absolute);
-                    self.pc += 2;
-
-                    self.stack_push_u16(self.pc);
+                    // +2 for consumed u16 destination
+                    // -1 because the spec says so
+                    self.stack_push_u16(self.pc + 2 - 1);
                     self.pc = jump_dest;
                 }
 
+                // JMP
+                0x4C => {
+                    let jump_dest = self.get_operand_address(&AddressingMode::Absolute);
+                    self.pc = jump_dest;
+                }
+
+                0x6C => {
+                    let jump_dest = self.get_operand_address(&AddressingMode::Indirect);
+                    self.pc = jump_dest;
+                }
+
+                // ROL
+                0x2A => {
+                    self.rol(&AddressingMode::None);
+                }
+                0x26 => {
+                    self.rol(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0x36 => {
+                    self.rol(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0x2E => {
+                    self.rol(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0x3E => {
+                    self.rol(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+
+                // ROR
+                0x6A => {
+                    self.ror(&AddressingMode::None);
+                }
+                0x66 => {
+                    self.ror(&AddressingMode::ZeroPage);
+                    self.pc += 1;
+                }
+                0x76 => {
+                    self.ror(&AddressingMode::ZeroPageX);
+                    self.pc += 1;
+                }
+                0x6E => {
+                    self.ror(&AddressingMode::Absolute);
+                    self.pc += 2;
+                }
+                0x7E => {
+                    self.ror(&AddressingMode::AbsoluteX);
+                    self.pc += 2;
+                }
+
+                // RTI
+                0x40 => self.rti(),
+
                 // RTS
                 0x60 => {
-                    let addr = self.stack_pop_u16();
+                    let addr = self.stack_pop_u16() + 1;
                     self.pc = addr;
                 }
 
@@ -666,7 +736,7 @@ impl CPU {
 
         self.set_zero_and_negative_flags(new_val);
         self.update_flag(Flag::Carry, overflow);
-        self.update_flag(Flag::Overflow, false); // TODO: not implemented
+        self.update_flag(Flag::Overflow, false); // TODO: not implemented -- fix it for snake to work?
     }
 
     /// AND (bitwise AND with accumulator)
@@ -708,11 +778,14 @@ impl CPU {
         // TODO: this reads the operand from memory the same way as AddressingMode::Immediate...
         // though the docs call this "Relative" addressing due to its use as an offset/displacement.
         // Should I refactor to use an addressing mode?
-        let displacement = self.mem_read(self.pc);
+        let displacement = self.mem_read(self.pc) as i8;
+
         self.pc += 1;
 
+        println!("is_set={:?} displacement = {:?}", is_set, displacement);
+
         if self.get_flag(flag) == is_set {
-            self.pc += displacement as u16;
+            self.pc = (self.pc as isize + displacement as isize) as u16
         }
     }
 
@@ -811,50 +884,49 @@ impl CPU {
     }
 
     // Register instructions //
-    // TAX (Transfer A to X)    $AA
-    // TXA (Transfer X to A)    $8A
-    // DEX (DEcrement X)        $CA
-    // INX (INcrement X)        $E8
-    // TAY (Transfer A to Y)    $A8
-    // TYA (Transfer Y to A)    $98
-    // DEY (DEcrement Y)        $88
-    // INY (INcrement Y)        $C8
 
+    /// TAX (Transfer A to X)
     fn tax(&mut self) {
         self.x = self.a;
         self.set_zero_and_negative_flags(self.x);
     }
 
+    /// TXA (Transfer X to A)
     fn txa(&mut self) {
         self.a = self.x;
         self.set_zero_and_negative_flags(self.a);
     }
 
+    /// DEX (DEcrement X)
     fn dex(&mut self) {
         self.x = self.x.wrapping_sub(1);
         self.set_zero_and_negative_flags(self.x);
     }
 
+    /// INX (INcrement X)
     fn inx(&mut self) {
         self.x = self.x.wrapping_add(1);
         self.set_zero_and_negative_flags(self.x);
     }
 
+    /// TAY (Transfer A to Y)
     fn tay(&mut self) {
         self.y = self.a;
         self.set_zero_and_negative_flags(self.y);
     }
 
+    /// TYA (Transfer Y to A)
     fn tya(&mut self) {
         self.a = self.y;
         self.set_zero_and_negative_flags(self.a);
     }
 
+    /// DEY (DEcrement Y)
     fn dey(&mut self) {
         self.y = self.y.wrapping_sub(1);
         self.set_zero_and_negative_flags(self.y);
     }
-
+    /// INY (INcrement Y)
     fn iny(&mut self) {
         self.y = self.y.wrapping_add(1);
         self.set_zero_and_negative_flags(self.y);
@@ -923,11 +995,135 @@ impl CPU {
         self.set_zero_and_negative_flags(self.a);
     }
 
+    /// ROL (ROtate Left)
+    fn rol(&mut self, mode: &AddressingMode) {
+        // I've overloaded the addressing mode idea to handle accumlator variant
+        if mode == &AddressingMode::None {
+            let old_val = self.a;
+            let new_val = self.a << 1;
+
+            self.a = new_val;
+
+            self.set_zero_and_negative_flags(new_val);
+            self.update_flag(Flag::Carry, old_val & 0b1000_0000 > 0);
+        } else {
+            let addr = self.get_operand_address(mode);
+            let old_val = self.mem_read(addr);
+            let new_val = old_val << 1;
+
+            self.mem_write(addr, new_val);
+
+            self.set_zero_and_negative_flags(new_val);
+            self.update_flag(Flag::Carry, old_val & 0b1000_0000 > 0);
+        }
+
+        // // I've overloaded the addressing mode idea to handle accumlator variant
+        // let old_val = if mode == &AddressingMode::None {
+        //     self.a
+        // } else {
+        //     let addr = self.get_operand_address(mode);
+        //     self.mem_read(addr)
+        // };
+
+        // let new_val = old_val << 1;
+
+        // // set new val
+        // if mode == &AddressingMode::None {
+        //     self.a = new_val;
+        // } else {
+        //     self.mem_write(addr, new_val);
+        // }
+
+        // self.set_zero_and_negative_flags(new_val);
+        // self.update_flag(Flag::Carry, old_val & 0b1000_0000 > 0);
+    }
+
+    /// ROR (ROtate Right)
+    fn ror(&mut self, mode: &AddressingMode) {
+        // I've overloaded the addressing mode idea to handle accumlator variant
+        if mode == &AddressingMode::None {
+            let old_val = self.a;
+            let mut new_val = self.a >> 1;
+            if self.get_flag(Flag::Carry) {
+                new_val |= 0x1 << 7;
+            }
+
+            self.a = new_val;
+
+            self.set_zero_and_negative_flags(new_val);
+            self.update_flag(Flag::Carry, old_val & 0b0000_0001 > 0);
+        } else {
+            let addr = self.get_operand_address(mode);
+            let old_val = self.mem_read(addr);
+            let mut new_val = old_val >> 1;
+            if self.get_flag(Flag::Carry) {
+                new_val |= 0x1 << 7;
+            }
+
+            self.mem_write(addr, new_val);
+
+            self.set_zero_and_negative_flags(new_val);
+            self.update_flag(Flag::Carry, old_val & 0b0000_0001 > 0);
+        }
+    }
+
+    /// RTI (ReTurn from Interrupt)
+    fn rti(&mut self) {}
+
     /// STA (STore Accumulator)
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
 
         self.mem_write(addr, self.a);
+    }
+
+    /// STX (STore X register)
+    fn stx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+
+        self.mem_write(addr, self.x);
+    }
+
+    /// STY (STore Y register)
+    fn sty(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+
+        self.mem_write(addr, self.y);
+    }
+
+    // Stack Instructions //
+
+    /// TXS (Transfer X to Stack ptr)
+    fn txs(&mut self) {
+        self.sp = self.x;
+        self.set_zero_and_negative_flags(self.sp);
+    }
+
+    /// TSX (Transfer Stack ptr to X)
+    fn tsx(&mut self) {
+        self.x = self.sp;
+        self.set_zero_and_negative_flags(self.x);
+    }
+
+    /// PHA (PusH Accumulator)
+    fn pha(&mut self) {
+        self.stack_push(self.a)
+    }
+
+    /// PLA (PuLl Accumulator)
+    fn pla(&mut self) {
+        self.a = self.stack_pop();
+        self.set_zero_and_negative_flags(self.a);
+    }
+
+    /// PHP (PusH Processor status)
+    fn php(&mut self) {
+        self.stack_push(self.status)
+    }
+
+    /// PLP (PuLl Processor status)
+    fn plp(&mut self) {
+        self.status = self.stack_pop()
     }
 
     //
@@ -1434,5 +1630,38 @@ mod tests {
         cpu.run();
         assert_eq!(cpu.mem_read(to_lsr_addr as u16), 0b0001_0010);
         assert_eq!(cpu.get_flag(Flag::Carry), true);
+    }
+
+    #[test]
+    fn test_rol() {
+        todo!()
+    }
+
+    #[test]
+    fn test_ror() {
+        todo!()
+    }
+
+    #[test]
+    fn test_0x40_rti() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0x40]);
+
+        todo!()
+    }
+
+    #[test]
+    fn test_bit() {
+        let mut cpu = CPU::new();
+        let bit_absolute = 0x2C;
+        cpu.mem_write(0x2001, 0b0010);
+        cpu.reset();
+        cpu.load(vec![bit_absolute, 0x01, 0x20, 0x00]);
+        cpu.a = 0b0101;
+        cpu.run();
+
+        assert_eq!(cpu.get_flag(Flag::Zero), true);
+        assert_eq!(cpu.get_flag(Flag::Negative), true);
+        assert_eq!(cpu.get_flag(Flag::Overflow), true);
     }
 }

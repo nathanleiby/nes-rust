@@ -1,3 +1,7 @@
 - [x] add a function to set status flags more easily (bitflags or similar)
 - [ ] Modify the test "Snake" game to work without changing the program start address
   - This should require updating any jmp instructions
+
+Learn
+- arithmetic vs logical shift
+
