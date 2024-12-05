@@ -128,8 +128,8 @@ impl CPU {
     fn stack_pop_u16(&mut self) -> u16 {
         let lo = self.stack_pop();
         let hi = self.stack_pop();
-        let out = (hi as u16) << 8 | lo as u16;
-        out
+        
+        (hi as u16) << 8 | lo as u16
     }
 
     //
@@ -154,8 +154,8 @@ impl CPU {
             AddressingMode::AbsoluteY => self.mem_read_u16(self.pc).wrapping_add(self.y as u16),
             AddressingMode::Indirect => {
                 let base = self.mem_read(self.pc);
-                let target = self.mem_read_zero_page_wrapping(base); // indirect
-                target
+                 // indirect
+                self.mem_read_zero_page_wrapping(base)
             }
             AddressingMode::IndirectX => {
                 // "Indexed indirect"
@@ -1299,8 +1299,7 @@ mod tests {
     #[test]
     fn test_addressing_modes() {
         let pc = 0x11;
-        for (mode, expected) in vec![
-            (AddressingMode::Immediate, pc),
+        for (mode, expected) in [(AddressingMode::Immediate, pc),
             (AddressingMode::ZeroPage, 0x22),
             (AddressingMode::ZeroPageX, 0x22 + 4),
             (AddressingMode::ZeroPageY, 0x22 + 2),
@@ -1308,8 +1307,7 @@ mod tests {
             (AddressingMode::AbsoluteX, 0x3322 + 4),
             (AddressingMode::AbsoluteY, 0x3322 + 2),
             (AddressingMode::IndirectX, 0x11),
-            (AddressingMode::IndirectY, 0x5533 + 2),
-        ] {
+            (AddressingMode::IndirectY, 0x5533 + 2)] {
             println!("Testing addressing mode = {:?}", mode);
             let mut cpu = CPU::new();
             cpu.pc = pc;
@@ -1381,7 +1379,7 @@ mod tests {
 
         // expect that you jump to jump_dest, then pc steps forward one more time while reading a BRK
         // (since everything is 0x00 BRK by default)
-        assert_eq!(cpu.pc, (jump_dest + 1) as u16);
+        assert_eq!(cpu.pc, { (jump_dest + 1) });
     }
 
     #[test]
@@ -1454,7 +1452,7 @@ mod tests {
         cpu.reset();
         cpu.mem_write_u16(inc_param_addr, to_inc_addr);
         cpu.run();
-        assert_eq!(cpu.mem_read(to_inc_addr as u16), 0x02);
+        assert_eq!(cpu.mem_read(to_inc_addr), 0x02);
     }
 
     #[test]
@@ -1473,8 +1471,8 @@ mod tests {
         cpu.a = 255;
         cpu.run();
         assert_eq!(cpu.a, 0);
-        assert_eq!(cpu.get_flag(Flag::Zero), true);
-        assert_eq!(cpu.get_flag(Flag::Carry), true);
+        assert!(cpu.get_flag(Flag::Zero));
+        assert!(cpu.get_flag(Flag::Carry));
     }
 
     #[test]
@@ -1511,7 +1509,7 @@ mod tests {
             cpu.run();
             assert_eq!(
                 cpu.pc,
-                CPU_START as u16 + consumed_bpl_op + 0 + consumed_brk_op
+                CPU_START as u16 + consumed_bpl_op + consumed_brk_op
             );
         }
     }
@@ -1538,7 +1536,7 @@ mod tests {
         cpu.a = 0b1000_1001;
         cpu.run();
         assert_eq!(cpu.a, 0b0100_0100);
-        assert_eq!(cpu.get_flag(Flag::Carry), true);
+        assert!(cpu.get_flag(Flag::Carry));
     }
 
     #[test]
@@ -1551,8 +1549,8 @@ mod tests {
         cpu.reset();
         cpu.mem_write_u16(lsr_param_addr, to_lsr_addr);
         cpu.run();
-        assert_eq!(cpu.mem_read(to_lsr_addr as u16), 0b0100_0100);
-        assert_eq!(cpu.get_flag(Flag::Carry), true);
+        assert_eq!(cpu.mem_read(to_lsr_addr), 0b0100_0100);
+        assert!(cpu.get_flag(Flag::Carry));
     }
 
     #[test]
@@ -1649,7 +1647,7 @@ mod tests {
         cpu.reset();
         cpu.mem_write_u16(dec_param_addr, to_dec_addr);
         cpu.run();
-        assert_eq!(cpu.mem_read(to_dec_addr as u16), 2);
+        assert_eq!(cpu.mem_read(to_dec_addr), 2);
     }
 
     #[test]
@@ -1672,7 +1670,7 @@ mod tests {
         cpu.a = 0b1000_1001;
         cpu.run();
         assert_eq!(cpu.a, 0b0001_0010);
-        assert_eq!(cpu.get_flag(Flag::Carry), true);
+        assert!(cpu.get_flag(Flag::Carry));
     }
 
     #[test]
@@ -1685,8 +1683,8 @@ mod tests {
         cpu.reset();
         cpu.mem_write_u16(lsr_param_addr, to_lsr_addr);
         cpu.run();
-        assert_eq!(cpu.mem_read(to_lsr_addr as u16), 0b0001_0010);
-        assert_eq!(cpu.get_flag(Flag::Carry), true);
+        assert_eq!(cpu.mem_read(to_lsr_addr), 0b0001_0010);
+        assert!(cpu.get_flag(Flag::Carry));
     }
 
     #[test]
@@ -1702,7 +1700,7 @@ mod tests {
         cpu.run();
 
         assert_eq!(cpu.a, 0b0001_0001);
-        assert_eq!(cpu.get_flag(Flag::Carry), true);
+        assert!(cpu.get_flag(Flag::Carry));
     }
 
     #[test]
@@ -1752,8 +1750,8 @@ mod tests {
         cpu.a = 0b0000_1111;
         cpu.run();
 
-        assert_eq!(cpu.get_flag(Flag::Zero), true);
-        assert_eq!(cpu.get_flag(Flag::Negative), true);
-        assert_eq!(cpu.get_flag(Flag::Overflow), true);
+        assert!(cpu.get_flag(Flag::Zero));
+        assert!(cpu.get_flag(Flag::Negative));
+        assert!(cpu.get_flag(Flag::Overflow));
     }
 }

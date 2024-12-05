@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let creator = canvas.texture_creator();
     let mut texture = creator.create_texture_target(PixelFormatEnum::RGB24, 32, 32)?;
 
-    let mut screen_state = [0 as u8; 32 * 3 * 32];
+    let mut screen_state = [0_u8; 32 * 3 * 32];
 
     let mut cpu = CPU::new();
     cpu.load(program);

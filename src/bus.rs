@@ -73,7 +73,7 @@ mod tests {
         assert_eq!(bus.mem_read(0), 123);
         assert_eq!(bus.mem_read(0x1 << 11), 123);
         assert_eq!(bus.mem_read(0x1 << 12), 123);
-        assert_eq!(bus.mem_read(0x1 << 11 + 0x1 << 12), 123);
+        assert_eq!(bus.mem_read(0x1 << (11 + 0x1) << 12), 123);
     }
 
     #[test]
@@ -86,7 +86,7 @@ mod tests {
         assert_eq!(bus.cpu_vram[0], 2);
         bus.mem_write(0x1 << 12, 3);
         assert_eq!(bus.cpu_vram[0], 3);
-        bus.mem_write(0x1 << 11 + 0x1 << 12, 4);
+        bus.mem_write(0x1 << (11 + 0x1) << 12, 4);
         assert_eq!(bus.cpu_vram[0], 4);
     }
 }
