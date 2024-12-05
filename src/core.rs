@@ -420,6 +420,14 @@ impl Cpu {
                     self.pc += 2;
                 }
 
+                // Stack Instructions
+                0x9A => self.txs(),
+                0xBA => self.tsx(),
+                0x48 => self.pha(),
+                0x68 => self.pla(),
+                0x08 => self.php(),
+                0x28 => self.plp(),
+
                 // ORA
                 0x09 => {
                     self.ora(&AddressingMode::Immediate);
