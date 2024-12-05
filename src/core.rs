@@ -830,9 +830,7 @@ impl CPU {
     // Branch Instructions //
 
     fn branch_on_flag(&mut self, flag: Flag, is_set: bool) {
-        // TODO: this reads the operand from memory the same way as AddressingMode::Immediate...
-        // though the docs call this "Relative" addressing due to its use as an offset/displacement.
-        // Should I refactor to use an addressing mode?
+        // displacement is read as a signed integer (2's complement)
         let displacement = self.mem_read(self.pc) as i8;
 
         self.pc += 1;
@@ -877,13 +875,14 @@ impl CPU {
     }
 
     /// BIT (test BITs)
+    /// used to test if one or more bits are set in a target memory location.
     fn bit(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
-        let param = self.mem_read(addr);
+        let value = self.mem_read(addr);
 
-        let outcome = param & self.a;
-        self.set_zero_and_negative_flags(outcome);
-        self.set_flag(Flag::Overflow, 0b0100_000 & param > 0);
+        self.set_flag(Flag::Zero, self.a & value == 0);
+        self.set_flag(Flag::Negative, 0b0100_0000 & value > 0);
+        self.set_flag(Flag::Overflow, 0b0010_0000 & value > 0);
     }
 
     // Comparisons //
@@ -1060,7 +1059,7 @@ impl CPU {
         // I've overloaded the addressing mode idea to handle accumlator variant
         if mode == &AddressingMode::None {
             let old_val = self.a;
-            let new_val = self.a << 1;
+            let new_val = (self.a << 1) + self.get_flag(Flag::Carry) as u8;
 
             self.a = new_val;
 
@@ -1069,33 +1068,13 @@ impl CPU {
         } else {
             let addr = self.get_operand_address(mode);
             let old_val = self.mem_read(addr);
-            let new_val = old_val << 1;
+            let new_val = (old_val << 1) + self.get_flag(Flag::Carry) as u8;
 
             self.mem_write(addr, new_val);
 
             self.set_zero_and_negative_flags(new_val);
             self.set_flag(Flag::Carry, old_val & 0b1000_0000 > 0);
         }
-
-        // // I've overloaded the addressing mode idea to handle accumlator variant
-        // let old_val = if mode == &AddressingMode::None {
-        //     self.a
-        // } else {
-        //     let addr = self.get_operand_address(mode);
-        //     self.mem_read(addr)
-        // };
-
-        // let new_val = old_val << 1;
-
-        // // set new val
-        // if mode == &AddressingMode::None {
-        //     self.a = new_val;
-        // } else {
-        //     self.mem_write(addr, new_val);
-        // }
-
-        // self.set_zero_and_negative_flags(new_val);
-        // self.update_flag(Flag::Carry, old_val & 0b1000_0000 > 0);
     }
 
     /// ROR (ROtate Right)
@@ -1128,7 +1107,10 @@ impl CPU {
     }
 
     /// RTI (ReTurn from Interrupt)
-    fn rti(&mut self) {}
+    fn rti(&mut self) {
+        self.status = self.stack_pop();
+        self.pc = self.stack_pop_u16();
+    }
 
     /// SBC (SuBtract with Carry)
     fn sbc(&mut self, mode: &AddressingMode) {
@@ -1709,30 +1691,65 @@ mod tests {
 
     #[test]
     fn test_rol() {
-        todo!()
+        let rol_accum = 0x2A;
+
+        let mut cpu = CPU::new();
+        cpu.load(vec![rol_accum]);
+        cpu.reset();
+
+        cpu.set_flag(Flag::Carry, true);
+        cpu.a = 0b1000_1000;
+        cpu.run();
+
+        assert_eq!(cpu.a, 0b0001_0001);
+        assert_eq!(cpu.get_flag(Flag::Carry), true);
     }
 
     #[test]
     fn test_ror() {
-        todo!()
+        let ror_accum = 0x6A;
+
+        for (before_a, before_carry, after_a, after_carry) in [
+            (0b0001_0001, true, 0b1000_1000, true),
+            (0b0001_0000, true, 0b1000_1000, false),
+        ] {
+            let mut cpu = CPU::new();
+            cpu.load(vec![ror_accum]);
+            cpu.reset();
+
+            cpu.a = before_a;
+            cpu.set_flag(Flag::Carry, before_carry);
+            cpu.run();
+
+            assert_eq!(cpu.a, after_a);
+            assert_eq!(cpu.get_flag(Flag::Carry), after_carry);
+        }
     }
 
     #[test]
     fn test_0x40_rti() {
         let mut cpu = CPU::new();
-        cpu.load_and_run(vec![0x40]);
+        cpu.load(vec![0x40]);
+        cpu.reset();
 
-        todo!()
+        let pc = 0x06FF;
+        let status: u8 = 0b1010_1010;
+        cpu.stack_push_u16(pc);
+        cpu.stack_push(status);
+
+        cpu.run();
+        assert_eq!(cpu.pc, pc + 1);
+        assert_eq!(cpu.status, status);
     }
 
     #[test]
     fn test_bit() {
         let mut cpu = CPU::new();
         let bit_absolute = 0x2C;
-        cpu.mem_write(0x2001, 0b0010);
+        cpu.load(vec![bit_absolute, 0x22, 0x11, 0x00]);
         cpu.reset();
-        cpu.load(vec![bit_absolute, 0x01, 0x20, 0x00]);
-        cpu.a = 0b0101;
+        cpu.mem_write(0x1122, 0b0110_0000);
+        cpu.a = 0b0000_1111;
         cpu.run();
 
         assert_eq!(cpu.get_flag(Flag::Zero), true);
