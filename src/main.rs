@@ -6,6 +6,7 @@ use std::time::Duration;
 
 mod bus;
 mod core;
+mod rom;
 
 use rand::random;
 use sdl2::event::Event;
