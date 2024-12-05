@@ -187,7 +187,7 @@ impl Cpu {
         self.mem_write_u16(0xFFFC, CPU_START as u16);
     }
 
-    pub fn load_and_run(&mut self, program: Vec<u8>) {
+    fn load_and_run(&mut self, program: Vec<u8>) {
         self.load(program);
         self.reset();
         self.run();
@@ -202,7 +202,7 @@ impl Cpu {
         self.pc = self.mem_read_u16(0xFFFC);
     }
 
-    pub fn run(&mut self) {
+    fn run(&mut self) {
         self.run_with_callback(|_| {});
     }
 
