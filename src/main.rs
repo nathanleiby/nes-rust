@@ -1,5 +1,5 @@
+use core::Cpu;
 use core::Mem;
-use core::CPU;
 use std::error::Error;
 use std::thread::sleep;
 use std::time::Duration;
@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut screen_state = [0_u8; 32 * 3 * 32];
 
-    let mut cpu = CPU::new();
+    let mut cpu = Cpu::new();
     cpu.load(program);
     cpu.reset();
     cpu.run_with_callback(move |cpu| {
@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
+fn handle_user_input(cpu: &mut Cpu, event_pump: &mut EventPump) {
     for event in event_pump.poll_iter() {
         match event {
             Event::Quit { .. }
@@ -116,7 +116,7 @@ fn color(byte: u8) -> Color {
     }
 }
 
-fn read_screen_state(cpu: &CPU, screen: &mut [u8; 32 * 3 * 32]) -> bool {
+fn read_screen_state(cpu: &Cpu, screen: &mut [u8; 32 * 3 * 32]) -> bool {
     let mut screen_idx = 0;
     let mut updated = false;
     for i in 0x0200..0x0600 {
