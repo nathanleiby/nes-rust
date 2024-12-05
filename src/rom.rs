@@ -11,14 +11,14 @@ enum Mapper {
 }
 
 pub struct Rom {
-    prg_rom: Vec<u8>,
+    pub prg_rom: Vec<u8>,
     chr_rom: Vec<u8>,
     mapper: Mapper,
     mirroring: Mirroring,
 }
 
-const CHR_ROM_PAGE_SIZE: usize = 256;
-const PRG_ROM_PAGE_SIZE: usize = 256;
+const PRG_ROM_PAGE_SIZE: usize = 16384;
+const CHR_ROM_PAGE_SIZE: usize = 8192;
 
 impl Rom {
     pub fn new(bytes: &[u8]) -> Self {
@@ -39,7 +39,7 @@ impl Rom {
         let control_byte_2 = header[7];
         // let size_of_prg_ram_times_8kb = header[8];
 
-        let has_trainer_bytes = control_byte_1 ^ (1 << 2) > 0;
+        let has_trainer_bytes = control_byte_1 ^ (1 << 2) == 0;
         let is_four_screen = control_byte_1 & (1 << 3) > 0;
         let is_vertical_screen = control_byte_1 & 1 > 0;
 
@@ -74,6 +74,38 @@ impl Rom {
             chr_rom,
             mapper,
             mirroring,
+        }
+    }
+
+    pub fn new_test() -> Self {
+        let mut prg_rom = [0; 0x8000].to_vec();
+        // prg_rom[0xFFFC - 0x8000] = CPU_START
+        // prg_rom[0xFFFC - 0x8000] = CPU_START
+        Self {
+            prg_rom: vec![],
+            chr_rom: vec![],
+            mapper: Mapper::Zero,
+            mirroring: Mirroring::Vertical,
+        }
+    }
+
+    pub(crate) fn new_test_rom(vec: Vec<u8>) -> Rom {
+        let mut prg_rom: Vec<u8> = [0; 0x8000].to_vec();
+        let program_start = 0x600;
+        for (idx, b) in vec.iter().enumerate() {
+            prg_rom[program_start + idx] = *b;
+        }
+
+        prg_rom[0xFFFC - 0x8000] = 0x00;
+        prg_rom[0xFFFD - 0x8000] = 0x86;
+
+        println!("{:?}", &prg_rom[0x600..0x640]);
+
+        Self {
+            prg_rom,
+            chr_rom: vec![],
+            mapper: Mapper::Zero,
+            mirroring: Mirroring::Vertical,
         }
     }
 }

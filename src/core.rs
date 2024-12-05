@@ -1,4 +1,7 @@
-use crate::bus::Bus;
+use crate::{
+    bus::{Bus, PRG_ROM_START},
+    rom::Rom,
+};
 
 /// CPU (Central Processing Unit)
 /// The NES uses  2A03, which is a modified version of the 6502 chip.
@@ -92,6 +95,7 @@ impl Mem for Cpu {
 
 impl Cpu {
     pub fn new() -> Self {
+        let rom = Rom::new_test();
         Cpu {
             pc: 0,
             sp: 0xff,
@@ -99,8 +103,12 @@ impl Cpu {
             x: 0,
             y: 0,
             status: 0,
-            bus: Bus::new(),
+            bus: Bus::new(rom),
         }
+    }
+
+    pub fn set_bus(&mut self, bus: Bus) {
+        self.bus = bus
     }
 
     //
@@ -181,11 +189,21 @@ impl Cpu {
 
     // load method should load a program into PRG ROM space and save the reference to the code into 0xFFFC memory cell
     pub fn load(&mut self, program: Vec<u8>) {
-        for (i, val) in program.iter().enumerate() {
-            self.mem_write((CPU_START + i) as u16, *val);
-        }
-        self.mem_write_u16(0xFFFC, CPU_START as u16);
+        // for (i, val) in program.iter().enumerate() {
+        //     self.mem_write((CPU_START + i) as u16, *val);
+        // }
+        let rom = Rom::new(&program);
+        self.set_bus(Bus::new(rom));
+
+        // TODO: update this to get unit tests working
+        // self.mem_write_u16(0xFFFC, CPU_START as u16);
     }
+
+    // pub fn load_rom(&mut self, rom: Rom) {
+    //     // Load turns program into ROM, then sets the bus
+    //     self.set_bus(Bus::new(rom));
+    //     // self.mem_write_u16(0xFFFC, CPU_START as u16);
+    // }
 
     fn load_and_run(&mut self, program: Vec<u8>) {
         self.load(program);
@@ -222,10 +240,10 @@ impl Cpu {
                 0,
                 op
             );
-            // println!(
-            //     "\ta={:#06x} x={:#06x} y={:#06x} flags={:#010b}",
-            //     self.a, self.x, self.y, self.status,
-            // );
+            println!(
+                "\ta={:#06x} x={:#06x} y={:#06x} flags={:#010b}",
+                self.a, self.x, self.y, self.status,
+            );
             self.pc += 1;
             match op {
                 // LDA
@@ -1280,7 +1298,9 @@ mod tests {
     #[test]
     fn test_0xa0_lda_immediate_nonzero() {
         let mut cpu = Cpu::new();
-        cpu.load_and_run(vec![0xa9, 0x55, 0x00]);
+        cpu.load_rom(Rom::new_test_rom(vec![0xa9, 0x55, 0x00]));
+        cpu.reset();
+        cpu.run();
         assert_eq!(cpu.a, 0x55);
         assert_eq!(cpu.status, 0b0000_0000);
     }

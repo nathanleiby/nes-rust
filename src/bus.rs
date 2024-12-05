@@ -1,4 +1,4 @@
-use crate::core::Mem;
+use crate::{core::Mem, rom::Rom};
 
 const RAM: u16 = 0x0000;
 const RAM_MIRROR_END: u16 = 0x2000;
@@ -6,39 +6,37 @@ const RAM_MIRROR_END: u16 = 0x2000;
 const PPU: u16 = 0x2000;
 const PPU_MIRROR_END: u16 = 0x4000;
 
+pub const PRG_ROM_START: u16 = 0x8000;
+const PRG_ROM_END: u16 = 0xFFFF;
+
 pub struct Bus {
     cpu_vram: [u8; 0x800], // 2048
-
-    // TODO: This was needed to get my tests working again after Ch4
-    // https://bugzmanov.github.io/nes_ebook/chapter_4.html
-    // Did the author have another approach? I couldn't find it in repo.
-    // fallback: [u8; 0xffff],
-    program_start1: u8,
-    program_start2: u8,
+    rom: Rom,
+    program_start_1: u8,
+    program_start_2: u8,
 }
 
 impl Bus {
-    pub fn new() -> Self {
+    pub fn new(rom: Rom) -> Self {
         Bus {
             cpu_vram: [0; 0x800],
-            // fallback: [0; 0xffff],
-            program_start1: 0,
-            program_start2: 0,
+            rom,
+            program_start_1: 0,
+            program_start_2: 0,
         }
     }
+
+    fn read_prg_rom(&self, addr: u16) -> u8 {
+        let mut idx = addr - PRG_ROM_START;
+
+        // If the prg rom is 16KiB (not 32KiB), then we should mirror it
+        if self.rom.prg_rom.len() == 0x4000 {
+            idx %= 0x4000;
+        }
+
+        self.rom.prg_rom[idx as usize]
+    }
 }
-
-// TODO: More mappings..
-
-// That RAM is accessible via [0x0000 … 0x2000] address space.
-
-// Access to [0x2000 … 0x4020] is redirected to other available NES hardware modules: PPU, APU, GamePads, etc. (more on this later)
-
-// Access to [0x4020 .. 0x6000] is a special space that different generations of cartridges used differently. It might be mapped to RAM, ROM, or nothing at all. The space is controlled by so-called mappers - special circuitry on a cartridge. We will ignore this space.
-
-// Access to [0x6000 .. 0x8000] is reserved to a RAM space on a cartridge if a cartridge has one. It was used in games like Zelda for storing and retrieving the game state. We will ignore this space as well.
-
-// Access to [0x8000 … 0xFFFF] is mapped to Program ROM (PRG ROM) space on a cartridge.
 
 impl Mem for Bus {
     fn mem_read(&self, addr: u16) -> u8 {
@@ -47,12 +45,15 @@ impl Mem for Bus {
             self.cpu_vram[a as usize]
         } else if (PPU..PPU_MIRROR_END).contains(&addr) {
             todo!("PPU NYI")
-        } else if addr == 0xFFFC {
-            self.program_start1
-        } else if addr == 0xFFFD {
-            self.program_start2
+        } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
+            // if addr == 0xFFFC {
+            //     self.program_start_1
+            // } else if addr == 0xFFFD {
+            //     self.program_start_2
+            // } else {
+            self.read_prg_rom(addr)
+            // }
         } else {
-            // self.fallback[addr as usize]
             0
         }
     }
@@ -63,10 +64,14 @@ impl Mem for Bus {
             self.cpu_vram[a as usize] = data
         } else if (PPU..PPU_MIRROR_END).contains(&addr) {
             todo!("PPU NYI")
-        } else if addr == 0xFFFC {
-            self.program_start1 = data
-        } else if addr == 0xFFFD {
-            self.program_start2 = data
+        } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
+            // if addr == 0xFFFC {
+            //     self.program_start_1 = data
+            // } else if addr == 0xFFFD {
+            //     self.program_start_2 = data
+            // } else {
+            panic!("attempt to write to ROM cartridge")
+            // }
         } else {
             // self.fallback[addr as usize] = data
         };
@@ -79,7 +84,8 @@ mod tests {
 
     #[test]
     fn test_read_mirroring() {
-        let mut bus = Bus::new();
+        let rom = Rom::new_test();
+        let mut bus = Bus::new(rom);
         bus.cpu_vram[0] = 123;
 
         assert_eq!(bus.mem_read(0), 123);
@@ -90,7 +96,8 @@ mod tests {
 
     #[test]
     fn test_write_mirroring() {
-        let mut bus = Bus::new();
+        let rom = Rom::new_test();
+        let mut bus = Bus::new(rom);
 
         bus.mem_write(0, 1);
         assert_eq!(bus.cpu_vram[0], 1);
