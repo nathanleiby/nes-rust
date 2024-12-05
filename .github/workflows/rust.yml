@@ -1,0 +1,27 @@
+name: Rust
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Lint
+        run: cargo clippy --all --all-features --tests -- -D warnings
+      - name: Build
+        run: cargo build --verbose
+      - name: Unit tests
+        run: cargo test --verbose
