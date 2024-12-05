@@ -192,18 +192,16 @@ impl Cpu {
         // for (i, val) in program.iter().enumerate() {
         //     self.mem_write((CPU_START + i) as u16, *val);
         // }
-        let rom = Rom::new(&program);
+        let rom = Rom::new_test_rom(program);
         self.set_bus(Bus::new(rom));
-
-        // TODO: update this to get unit tests working
         // self.mem_write_u16(0xFFFC, CPU_START as u16);
     }
 
-    // pub fn load_rom(&mut self, rom: Rom) {
-    //     // Load turns program into ROM, then sets the bus
-    //     self.set_bus(Bus::new(rom));
-    //     // self.mem_write_u16(0xFFFC, CPU_START as u16);
-    // }
+    pub fn load_rom(&mut self, rom: Rom) {
+        // Load turns program into ROM, then sets the bus
+        self.set_bus(Bus::new(rom));
+        // self.mem_write_u16(0xFFFC, CPU_START as u16);
+    }
 
     fn load_and_run(&mut self, program: Vec<u8>) {
         self.load(program);
@@ -1314,20 +1312,23 @@ mod tests {
     }
 
     #[test]
-    fn test_lda_from_memory() {
+    fn test_0xa5_lda_from_memory() {
         let mut cpu = Cpu::new();
+        cpu.load(vec![0xa5, 0x10, 0x00]);
+        cpu.reset();
         cpu.mem_write(0x10, 0x55);
-        assert_eq!(cpu.mem_read(0x10), 0x55);
-        cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
+        cpu.run();
 
         assert_eq!(cpu.a, 0x55);
     }
 
     #[test]
-    fn test_lda_absolute() {
+    fn test_0xad_lda_absolute() {
         let mut cpu = Cpu::new();
+        cpu.load(vec![0xad, 0x03, 0x10, 0x00]);
+        cpu.reset();
         cpu.mem_write(0x1003, 0x99);
-        cpu.load_and_run(vec![0xad, 0x03, 0x10, 0x00]);
+        cpu.run();
 
         assert_eq!(cpu.a, 0x99);
     }
@@ -1460,9 +1461,10 @@ mod tests {
     #[test]
     fn test_jmp() {
         let mut cpu = Cpu::new();
-        let jump_dest: u16 = (CPU_START as u16) + 333;
-        cpu.mem_write_u16((CPU_START as u16) + 1, jump_dest);
-        cpu.load_and_run(vec![0x20]);
+        let jump_dest: u16 = (PRG_ROM_START + CPU_START as u16) + 333;
+        let lo = (jump_dest & 0xff) as u8;
+        let hi = (jump_dest >> 8) as u8;
+        cpu.load_and_run(vec![0x20, lo, hi]);
 
         // expect that you jump to jump_dest, then pc steps forward one more time while reading a BRK
         // (since everything is 0x00 BRK by default)
@@ -1475,19 +1477,19 @@ mod tests {
 
         let jmp_opcode = 0x20;
         let rts_opcode = 0x60;
-        cpu.load(vec![jmp_opcode]);
-        cpu.reset();
 
         let jump_dest: u16 = (CPU_START as u16) + 123;
-        cpu.mem_write_u16((CPU_START as u16) + 1, jump_dest);
-
+        let lo = (jump_dest & 0xff) as u8;
+        let hi = (jump_dest >> 8) as u8;
+        cpu.load(vec![jmp_opcode, lo, hi]);
+        cpu.reset();
         cpu.mem_write(jump_dest, rts_opcode);
 
         cpu.run();
         // +4 =
         // [0    1     2       3  ]
         // [jmp, addr, addr+1, brk] .. and +1 as last pc+1 after brek
-        assert_eq!(cpu.pc, (CPU_START as u16) + 4);
+        assert_eq!(cpu.pc, (PRG_ROM_START + CPU_START as u16) + 4);
     }
 
     #[test]
@@ -1532,14 +1534,19 @@ mod tests {
     #[test]
     fn test_0xee_inc_absolute() {
         let mut cpu = Cpu::new();
-        let to_inc = 0x01;
-        let to_inc_addr = CPU_START as u16 + 4;
-        let inc_param_addr = CPU_START as u16 + 1;
-        cpu.load(vec![0xee, 0x00, 0x00, 0x00, to_inc]);
+
+        let inst = 0xee;
+
+        let target_val = 3;
+        let target_address = 0x12; // needs to be in CPU
+
+        let hi = (target_address >> 8) as u8;
+        let lo = (target_address & 0x00ff) as u8;
+        cpu.load(vec![inst, lo, hi, 0x00]);
+        cpu.mem_write(target_address, target_val);
         cpu.reset();
-        cpu.mem_write_u16(inc_param_addr, to_inc_addr);
         cpu.run();
-        assert_eq!(cpu.mem_read(to_inc_addr), 0x02);
+        assert_eq!(cpu.mem_read(target_address), 4);
     }
 
     #[test]
@@ -1586,7 +1593,11 @@ mod tests {
             let consumed_brk_op = 1;
             assert_eq!(
                 cpu.pc,
-                CPU_START as u16 + consumed_bpl_op + displacement as u16 + consumed_brk_op
+                PRG_ROM_START
+                    + CPU_START as u16
+                    + consumed_bpl_op
+                    + displacement as u16
+                    + consumed_brk_op
             );
 
             let mut cpu = Cpu::new();
@@ -1594,7 +1605,10 @@ mod tests {
             cpu.reset();
             cpu.set_flag(flag, !branch_if);
             cpu.run();
-            assert_eq!(cpu.pc, CPU_START as u16 + consumed_bpl_op + consumed_brk_op);
+            assert_eq!(
+                cpu.pc,
+                PRG_ROM_START + CPU_START as u16 + consumed_bpl_op + consumed_brk_op
+            );
         }
     }
 
@@ -1626,14 +1640,17 @@ mod tests {
     #[test]
     fn test_0x4e_lsr_shifts_absolute() {
         let mut cpu = Cpu::new();
-        let to_lsr = 0b1000_1001;
-        let to_lsr_addr = CPU_START as u16 + 4;
-        let lsr_param_addr = CPU_START as u16 + 1;
-        cpu.load(vec![0x4e, 0x00, 0x00, 0x00, to_lsr]);
+
+        let target_val = 0b1000_1001;
+        let target_address = 0x12; // needs to be in CPU
+
+        let hi = (target_address >> 8) as u8;
+        let lo = (target_address & 0x00ff) as u8;
+        cpu.load(vec![0x4e, lo, hi, 0x00]);
+        cpu.mem_write(target_address, target_val);
         cpu.reset();
-        cpu.mem_write_u16(lsr_param_addr, to_lsr_addr);
         cpu.run();
-        assert_eq!(cpu.mem_read(to_lsr_addr), 0b0100_0100);
+        assert_eq!(cpu.mem_read(target_address), 0b0100_0100);
         assert!(cpu.get_flag(Flag::Carry));
     }
 
@@ -1642,7 +1659,7 @@ mod tests {
         let mut cpu = Cpu::new();
         let program = vec![0xea, 0xea, 0xea, 0xea, 0x00];
         cpu.load_and_run(program.clone());
-        let end = (CPU_START + program.len()) as u16;
+        let end = PRG_ROM_START + (CPU_START + program.len()) as u16;
         assert_eq!(cpu.pc, end);
     }
 
@@ -1723,15 +1740,19 @@ mod tests {
     #[test]
     fn test_0xce_dec_absolute() {
         let mut cpu = Cpu::new();
-        let dec = 0xce;
-        let to_dec = 3;
-        let to_dec_addr = CPU_START as u16 + 4;
-        let dec_param_addr = CPU_START as u16 + 1;
-        cpu.load(vec![dec, 0x00, 0x00, 0x00, to_dec]);
+
+        let inst = 0xce;
+
+        let target_val = 3;
+        let target_address = 0x12; // needs to be in CPU
+
+        let hi = (target_address >> 8) as u8;
+        let lo = (target_address & 0x00ff) as u8;
+        cpu.load(vec![inst, lo, hi, 0x00]);
+        cpu.mem_write(target_address, target_val);
         cpu.reset();
-        cpu.mem_write_u16(dec_param_addr, to_dec_addr);
         cpu.run();
-        assert_eq!(cpu.mem_read(to_dec_addr), 2);
+        assert_eq!(cpu.mem_read(target_address), 2);
     }
 
     #[test]
@@ -1760,12 +1781,15 @@ mod tests {
     #[test]
     fn test_0x0e_asl_shifts_absolute() {
         let mut cpu = Cpu::new();
+
         let to_lsr = 0b1000_1001;
-        let to_lsr_addr = CPU_START as u16 + 4;
-        let lsr_param_addr = CPU_START as u16 + 1;
-        cpu.load(vec![0x0e, 0x00, 0x00, 0x00, to_lsr]);
+        let to_lsr_addr = 0x12; // needs to be in CPU
+
+        let hi = (to_lsr_addr >> 8) as u8;
+        let lo = (to_lsr_addr & 0x00ff) as u8;
+        cpu.load(vec![0x0e, lo, hi, 0x00]);
+        cpu.mem_write(to_lsr_addr, to_lsr);
         cpu.reset();
-        cpu.mem_write_u16(lsr_param_addr, to_lsr_addr);
         cpu.run();
         assert_eq!(cpu.mem_read(to_lsr_addr), 0b0001_0010);
         assert!(cpu.get_flag(Flag::Carry));

@@ -9,7 +9,6 @@ mod bus;
 mod core;
 mod rom;
 
-use bus::Bus;
 use rand::random;
 use rom::Rom;
 use sdl2::event::Event;
@@ -39,7 +38,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let program = fs::read("roms/snake.nes").unwrap();
 
     let mut cpu = Cpu::new();
-    cpu.load(program);
+    cpu.load_rom(Rom::new(&program));
     cpu.reset();
     cpu.run_with_callback(move |cpu| {
         // read user input and write it to mem[0xFF]

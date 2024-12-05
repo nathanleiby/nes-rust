@@ -78,7 +78,7 @@ impl Rom {
     }
 
     pub fn new_test() -> Self {
-        let mut prg_rom = [0; 0x8000].to_vec();
+        let prg_rom = [0; 0x8000].to_vec();
         // prg_rom[0xFFFC - 0x8000] = CPU_START
         // prg_rom[0xFFFC - 0x8000] = CPU_START
         Self {
