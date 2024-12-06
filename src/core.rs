@@ -1,6 +1,6 @@
 use crate::{
     bus::Bus,
-    ops::{parse_opcode, OpName},
+    ops::{lookup_opcode, OpName},
     rom::Rom,
 };
 
@@ -47,8 +47,8 @@ pub enum AddressingMode {
     Indirect,
 }
 
-#[derive(Copy, Clone)]
-enum Flag {
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Flag {
     Negative,
     Overflow,
     // TODO
@@ -230,251 +230,33 @@ impl Cpu {
             let opcode = self.mem_read(self.pc);
             self.pc += 1;
 
-            if let Some(op) = parse_opcode(opcode) {
-                match op.0 {
-                    OpName::LDA => self.lda(&op.2),
-                    _ => todo!(),
+            if let Some((name, size, mode)) = lookup_opcode(opcode) {
+                match name {
+                    OpName::ASL => self.asl(&mode),
+                    OpName::LDA => self.lda(&mode),
+                    OpName::LDX => self.ldx(&mode),
+                    OpName::LDY => self.ldy(&mode),
+                    OpName::LSR => self.lsr(&mode),
+                    OpName::STA => self.sta(&mode),
+                    OpName::STX => self.stx(&mode),
+                    OpName::STY => self.sty(&mode),
+                    OpName::TODO => todo!(),
+                    OpName::BIT => self.bit(&mode),
+                    OpName::NOP => self.nop(),
+                    OpName::TXS => self.txs(),
+                    OpName::TSX => self.tsx(),
+                    OpName::PHA => self.pha(),
+                    OpName::PLA => self.pla(),
+                    OpName::PHP => self.php(),
+                    OpName::PLP => self.plp(),
+                    OpName::ORA => self.ora(&mode),
                 }
-                self.pc += op.1;
+                self.pc += size - 1;
 
                 continue;
             }
 
             match opcode {
-                // // LDA
-                // 0xA9 => {
-                //     self.lda(&AddressingMode::Immediate);
-                //     self.pc += 1;
-                // }
-                // 0xA5 => {
-                //     self.lda(&AddressingMode::ZeroPage);
-                //     self.pc += 1;
-                // }
-                // 0xB5 => {
-                //     self.lda(&AddressingMode::ZeroPageX);
-                //     self.pc += 1;
-                // }
-                // 0xAD => {
-                //     self.lda(&AddressingMode::Absolute);
-                //     self.pc += 2;
-                // }
-                // 0xBD => {
-                //     self.lda(&AddressingMode::AbsoluteX);
-                //     self.pc += 2;
-                // }
-                // 0xB9 => {
-                //     self.lda(&AddressingMode::AbsoluteY);
-                //     self.pc += 2;
-                // }
-                // 0xA1 => {
-                //     self.lda(&AddressingMode::IndirectX);
-                //     self.pc += 1;
-                // }
-                // 0xB1 => {
-                //     self.lda(&AddressingMode::IndirectY);
-                //     self.pc += 1;
-                // }
-
-                // LDX
-                0xA2 => {
-                    self.ldx(&AddressingMode::Immediate);
-                    self.pc += 1;
-                }
-                0xA6 => {
-                    self.ldx(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0xB6 => {
-                    self.ldx(&AddressingMode::ZeroPageY);
-                    self.pc += 1;
-                }
-                0xAE => {
-                    self.ldx(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0xBE => {
-                    self.ldx(&AddressingMode::AbsoluteY);
-                    self.pc += 2;
-                }
-
-                // LDY
-                0xA0 => {
-                    self.ldy(&AddressingMode::Immediate);
-                    self.pc += 1;
-                }
-                0xA4 => {
-                    self.ldy(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0xB4 => {
-                    self.ldy(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0xAC => {
-                    self.ldy(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0xBC => {
-                    self.ldy(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-
-                // LSR
-                0x4A => {
-                    self.lsr(&AddressingMode::None);
-                    // BUG
-                }
-                0x46 => {
-                    self.lsr(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x56 => {
-                    self.lsr(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0x4E => {
-                    self.lsr(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0x5E => {
-                    self.lsr(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-
-                // ASL
-                0x0A => {
-                    self.asl(&AddressingMode::None);
-                }
-                0x06 => {
-                    self.asl(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x16 => {
-                    self.asl(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0x0E => {
-                    self.asl(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0x1E => {
-                    self.asl(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-
-                // BIT
-                0x24 => {
-                    self.bit(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x2C => {
-                    self.bit(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-
-                // NOP
-                0xEA => self.nop(),
-
-                // STA
-                0x85 => {
-                    self.sta(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x95 => {
-                    self.sta(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0x8D => {
-                    self.sta(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0x9D => {
-                    self.sta(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-                0x99 => {
-                    self.sta(&AddressingMode::AbsoluteY);
-                    self.pc += 2;
-                }
-                0x81 => {
-                    self.sta(&AddressingMode::IndirectX);
-                    self.pc += 1;
-                }
-                0x91 => {
-                    self.sta(&AddressingMode::IndirectY);
-                    self.pc += 1;
-                }
-
-                // STX
-                0x86 => {
-                    self.stx(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x96 => {
-                    self.stx(&AddressingMode::ZeroPageY);
-                    self.pc += 1;
-                }
-                0x8E => {
-                    self.stx(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-
-                // STY
-                0x84 => {
-                    self.sty(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x94 => {
-                    self.sty(&AddressingMode::ZeroPageY);
-                    self.pc += 1;
-                }
-                0x8C => {
-                    self.sty(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-
-                // Stack Instructions
-                0x9A => self.txs(),
-                0xBA => self.tsx(),
-                0x48 => self.pha(),
-                0x68 => self.pla(),
-                0x08 => self.php(),
-                0x28 => self.plp(),
-
-                // ORA
-                0x09 => {
-                    self.ora(&AddressingMode::Immediate);
-                    self.pc += 1;
-                }
-                0x05 => {
-                    self.ora(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x15 => {
-                    self.ora(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0x0D => {
-                    self.ora(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0x1D => {
-                    self.ora(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-                0x19 => {
-                    self.ora(&AddressingMode::AbsoluteY);
-                    self.pc += 2;
-                }
-                0x01 => {
-                    self.ora(&AddressingMode::IndirectX);
-                    self.pc += 1;
-                }
-                0x11 => {
-                    self.ora(&AddressingMode::IndirectY);
-                    self.pc += 1;
-                }
-
                 // AND
                 0x29 => {
                     self.and(&AddressingMode::Immediate);
@@ -754,10 +536,7 @@ impl Cpu {
                 0x40 => self.rti(),
 
                 // RTS
-                0x60 => {
-                    let addr = self.stack_pop_u16() + 1;
-                    self.pc = addr;
-                }
+                0x60 => self.rts(),
 
                 // Register Instructions
                 0xAA => self.tax(),
@@ -826,6 +605,11 @@ impl Cpu {
                 }
             }
         }
+    }
+
+    fn rts(&mut self) {
+        let addr = self.stack_pop_u16() + 1;
+        self.pc = addr;
     }
 
     //
@@ -1288,30 +1072,71 @@ impl Cpu {
     pub fn trace(&self) -> String {
         // C000  4C F5 C5  JMP $C5F5                       A:00 X:00 Y:00 P:24 SP:FD PPU:  0, 21 CYC:7
 
-        let op = self.mem_read(self.pc);
+        let code = self.mem_read(self.pc);
         let param1 = self.mem_read(self.pc + 1);
         let param2 = self.mem_read(self.pc + 2);
 
-        let addr_block = "($80,X) @ 80 = 0200 = 00 ";
+        //// Address syntax by mode looks like:
 
-        format!(
-            "{:04X}  {:02X} {:02X} {:02X} {:>4} {:<20}   A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}", //  PPU:{:>3},{:>3} CYC:{:>4}
-            self.pc,
-            op,
-            param1,
-            param2,
-            "TLA", // TODO: opname sometimes has * prefix like *NOP
-            addr_block,
-            self.a,
-            self.x,
-            self.y,
-            self.status,
-            self.sp,
-            // 0,
-            // 0,
-            // 0
-        )
-        .to_string()
+        // MODE           SYNTAX       HEX LEN TIM
+        // Immediate     SBC #$44      $E9  2   2
+        // Zero Page     SBC $44       $E5  2   3
+        // Zero Page,X   SBC $44,X     $F5  2   4
+        // Absolute      SBC $4400     $ED  3   4
+        // Absolute,X    SBC $4400,X   $FD  3   4+
+        // Absolute,Y    SBC $4400,Y   $F9  3   4+
+        // Indirect,X    SBC ($44,X)   $E1  2   6
+        // Indirect,Y    SBC ($44),Y   $F1  2   5+
+
+        println!("code = {:02x}", code);
+        if let Some(op) = lookup_opcode(code) {
+            let tla = format!("{}", op.0);
+            let addr_block = match op.2 {
+                // AddressingMode::Immediate => todo!(),
+                // AddressingMode::ZeroPage => todo!(),
+                // AddressingMode::ZeroPageX => todo!(),
+                // AddressingMode::ZeroPageY => todo!(),
+                // AddressingMode::Absolute => todo!(),
+                // AddressingMode::AbsoluteX => todo!(),
+                // AddressingMode::AbsoluteY => todo!(),
+                // AddressingMode::IndirectX => todo!(),
+                AddressingMode::IndirectY => {
+                    format!("(${:02x}),Y = {:04x} @ {:04x}", param1, param1, param1)
+                }
+                // AddressingMode::None => todo!(),
+                // AddressingMode::Indirect => todo!(),
+                _ => "".to_string(),
+            };
+
+            format!(
+                "{:04X}  {:02X} {} {} {:>4} {:<28}A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}", //  PPU:{:>3},{:>3} CYC:{:>4}
+                self.pc,
+                code,
+                if op.1 >= 2 {
+                    format!("{:02X}", param1)
+                } else {
+                    "  ".to_string()
+                },
+                if op.1 >= 3 {
+                    format!("{:02X}", param2)
+                } else {
+                    "  ".to_string()
+                },
+                tla, // TODO: opname sometimes has * prefix like *NOP
+                addr_block,
+                self.a,
+                self.x,
+                self.y,
+                self.status,
+                self.sp,
+                // 0,
+                // 0,
+                // 0
+            )
+            .to_string()
+        } else {
+            "".to_string()
+        }
     }
 }
 
