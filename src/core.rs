@@ -62,6 +62,8 @@ pub enum Flag {
 // TODO: restore this later. It's hard-coded to support Snake right now
 // const CPU_START: u16 = 0x8000;
 pub const CPU_START: usize = 0x0600;
+const DEFAULT_STACK_POINTER: u8 = 0xfd;
+const DEFAULT_STATUS: u8 = 0b100100;
 
 pub trait Mem {
     fn mem_read(&self, addr: u16) -> u8;
@@ -100,11 +102,11 @@ impl Cpu {
         let rom = Rom::new_test_rom(vec![]);
         Cpu {
             pc: 0,
-            sp: 0xfd,
+            sp: DEFAULT_STACK_POINTER,
             a: 0,
             x: 0,
             y: 0,
-            status: 0b100100,
+            status: DEFAULT_STATUS,
             bus: Bus::new(rom),
         }
     }
@@ -215,9 +217,9 @@ impl Cpu {
         self.a = 0;
         self.x = 0;
         self.y = 0;
-        self.sp = 0xfd;
+        self.sp = DEFAULT_STACK_POINTER;
         self.pc = self.mem_read_u16(0xFFFC);
-        // self.status = 0b100100; // TODO: This breaks my unit tests, but seems correct
+        // self.status = DEFAULT_STATUS; // TODO: This breaks my unit tests, but seems correct
         self.status = 0; // TODO: is this the correct initial state? I see various tests where both break flags are on
     }
 
@@ -991,7 +993,7 @@ impl Cpu {
             )
             .to_string()
         } else {
-            "UNKNOWN OP: TODO".to_string()
+            format!("UNKNOWN OP (code={:02x}): TODO", code)
         }
     }
 }
