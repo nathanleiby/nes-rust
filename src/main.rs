@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
     let window = video_subsystem
-        .window("Snake Game", 320, 320)
+        .window("", 320, 320)
         .position_centered()
         .build()?;
 
@@ -35,12 +35,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut screen_state = [0_u8; 32 * 3 * 32];
 
     // snake game, for basic testing
-    let program = fs::read("roms/snake.nes").unwrap();
+    // let program = fs::read("roms/snake.nes").unwrap();
+    let program = fs::read("roms/nestest.nes").unwrap();
 
     let mut cpu = Cpu::new();
     cpu.load_rom(Rom::new(&program));
     cpu.reset();
     cpu.run_with_callback(move |cpu| {
+        println!("{}", cpu.trace());
+
         // read user input and write it to mem[0xFF]
         handle_user_input(cpu, &mut event_pump);
 

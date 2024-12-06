@@ -19,6 +19,7 @@ Priorities:
 - Spec:
   - https://www.nesdev.org/obelisk-6502-guide/reference.html
   - http://www.6502.org/tutorials/6502opcodes.html
+- NES Test Roms: https://github.com/christopherpow/nes-test-roms
 
 ### Other interesting Tools
 

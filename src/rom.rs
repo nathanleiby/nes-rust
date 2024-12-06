@@ -95,8 +95,6 @@ impl Rom {
         prg_rom[0xFFFC - 0x8000] = 0x00;
         prg_rom[0xFFFD - 0x8000] = 0x86;
 
-        println!("{:?}", &prg_rom[0x600..0x640]);
-
         Self {
             prg_rom,
             chr_rom: vec![],

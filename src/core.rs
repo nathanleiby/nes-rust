@@ -97,7 +97,7 @@ impl Cpu {
         let rom = Rom::new_test_rom(vec![]);
         Cpu {
             pc: 0,
-            sp: 0xff,
+            sp: 0xfd, // TODO: should it be inited to FD? or should something be put on it immediately?
             a: 0,
             x: 0,
             y: 0,
@@ -224,18 +224,6 @@ impl Cpu {
             callback(self);
 
             let op = self.mem_read(self.pc);
-            // TODO: Turn this into trace() fn
-            println!(
-                "pc={:#06x} (program idx={:03}) op={:#04x}",
-                self.pc,
-                // self.pc - CPU_START as u16,
-                0,
-                op
-            );
-            println!(
-                "\ta={:#06x} x={:#06x} y={:#06x} flags={:#010b}",
-                self.a, self.x, self.y, self.status,
-            );
             self.pc += 1;
             match op {
                 // LDA
@@ -1281,6 +1269,35 @@ impl Cpu {
         let val = self.status & mask;
         val != 0
     }
+
+    pub fn trace(&self) -> String {
+        // C000  4C F5 C5  JMP $C5F5                       A:00 X:00 Y:00 P:24 SP:FD PPU:  0, 21 CYC:7
+
+        let op = self.mem_read(self.pc);
+        let param1 = self.mem_read(self.pc + 1);
+        let param2 = self.mem_read(self.pc + 2);
+
+        let addr_block = "($80,X) @ 80 = 0200 = 00 ";
+
+        format!(
+            "{:04X}  {:02X} {:02X} {:02X} {:>4} {:<20}   A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}", //  PPU:{:>3},{:>3} CYC:{:>4}
+            self.pc,
+            op,
+            param1,
+            param2,
+            "TLA", // TODO: opname sometimes has * prefix like *NOP
+            addr_block,
+            self.a,
+            self.x,
+            self.y,
+            self.status,
+            self.sp,
+            // 0,
+            // 0,
+            // 0
+        )
+        .to_string()
+    }
 }
 
 #[cfg(test)]
@@ -1857,5 +1874,66 @@ mod tests {
         assert!(cpu.get_flag(Flag::Zero));
         assert!(cpu.get_flag(Flag::Negative));
         assert!(cpu.get_flag(Flag::Overflow));
+    }
+
+    #[test]
+    fn test_format_trace() {
+        let mut bus = Bus::new(Rom::new_test_rom(vec![]));
+        bus.mem_write(100, 0xa2);
+        bus.mem_write(101, 0x01);
+        bus.mem_write(102, 0xca);
+        bus.mem_write(103, 0x88);
+        bus.mem_write(104, 0x00);
+
+        let mut cpu = Cpu::new();
+        cpu.set_bus(bus);
+        cpu.pc = 0x64;
+        cpu.a = 1;
+        cpu.x = 2;
+        cpu.y = 3;
+        let mut result: Vec<String> = vec![];
+        cpu.run_with_callback(|cpu| {
+            result.push(cpu.trace());
+        });
+        assert_eq!(
+            "0064  A2 01     LDX #$01                        A:01 X:02 Y:03 P:24 SP:FD",
+            result[0]
+        );
+        assert_eq!(
+            "0066  CA        DEX                             A:01 X:01 Y:03 P:24 SP:FD",
+            result[1]
+        );
+        assert_eq!(
+            "0067  88        DEY                             A:01 X:00 Y:03 P:26 SP:FD",
+            result[2]
+        );
+    }
+
+    #[test]
+    fn test_format_mem_access() {
+        let mut bus = Bus::new(Rom::new_test_rom(vec![]));
+        // ORA ($33), Y
+        bus.mem_write(100, 0x11);
+        bus.mem_write(101, 0x33);
+
+        //data
+        bus.mem_write(0x33, 00);
+        bus.mem_write(0x34, 04);
+
+        //target cell
+        bus.mem_write(0x400, 0xAA);
+
+        let mut cpu = Cpu::new();
+        cpu.set_bus(bus);
+        cpu.pc = 0x64;
+        cpu.y = 0;
+        let mut result: Vec<String> = vec![];
+        cpu.run_with_callback(|cpu| {
+            result.push(cpu.trace());
+        });
+        assert_eq!(
+            "0064  11 33     ORA ($33),Y = 0400 @ 0400 = AA  A:00 X:00 Y:00 P:24 SP:FD",
+            result[0]
+        );
     }
 }
