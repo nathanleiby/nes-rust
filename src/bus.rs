@@ -12,8 +12,6 @@ const PRG_ROM_END: u16 = 0xFFFF;
 pub struct Bus {
     cpu_vram: [u8; 0x800], // 2048
     rom: Rom,
-    program_start_1: u8,
-    program_start_2: u8,
 }
 
 impl Bus {
@@ -21,8 +19,6 @@ impl Bus {
         Bus {
             cpu_vram: [0; 0x800],
             rom,
-            program_start_1: 0,
-            program_start_2: 0,
         }
     }
 
@@ -46,13 +42,7 @@ impl Mem for Bus {
         } else if (PPU..PPU_MIRROR_END).contains(&addr) {
             todo!("PPU NYI")
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
-            // if addr == 0xFFFC {
-            //     self.program_start_1
-            // } else if addr == 0xFFFD {
-            //     self.program_start_2
-            // } else {
             self.read_prg_rom(addr)
-            // }
         } else {
             0
         }
@@ -65,15 +55,9 @@ impl Mem for Bus {
         } else if (PPU..PPU_MIRROR_END).contains(&addr) {
             todo!("PPU NYI")
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
-            // if addr == 0xFFFC {
-            //     self.program_start_1 = data
-            // } else if addr == 0xFFFD {
-            //     self.program_start_2 = data
-            // } else {
             panic!("attempt to write to ROM cartridge")
-            // }
         } else {
-            // self.fallback[addr as usize] = data
+            panic!("attempt to write to NYI section of memory")
         };
     }
 }
@@ -84,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_read_mirroring() {
-        let rom = Rom::new_test();
+        let rom = Rom::new_test_rom(vec![]);
         let mut bus = Bus::new(rom);
         bus.cpu_vram[0] = 123;
 
@@ -96,7 +80,7 @@ mod tests {
 
     #[test]
     fn test_write_mirroring() {
-        let rom = Rom::new_test();
+        let rom = Rom::new_test_rom(vec![]);
         let mut bus = Bus::new(rom);
 
         bus.mem_write(0, 1);

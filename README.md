@@ -13,7 +13,13 @@ Priorities:
 
 ## References
 
+### Howto
+
 - Book with Walkthrough: https://bugzmanov.github.io/nes_ebook
 - Spec:
   - https://www.nesdev.org/obelisk-6502-guide/reference.html
   - http://www.6502.org/tutorials/6502opcodes.html
+
+### Other interesting Tools
+
+- https://github.com/tedsteen/nes-bundler

@@ -77,19 +77,7 @@ impl Rom {
         }
     }
 
-    pub fn new_test() -> Self {
-        let prg_rom = [0; 0x8000].to_vec();
-        // prg_rom[0xFFFC - 0x8000] = CPU_START
-        // prg_rom[0xFFFC - 0x8000] = CPU_START
-        Self {
-            prg_rom: vec![],
-            chr_rom: vec![],
-            mapper: Mapper::Zero,
-            mirroring: Mirroring::Vertical,
-        }
-    }
-
-    pub(crate) fn new_test_rom(vec: Vec<u8>) -> Rom {
+    pub fn new_test_rom(vec: Vec<u8>) -> Rom {
         let mut prg_rom: Vec<u8> = [0; 0x8000].to_vec();
         let program_start = 0x600;
         for (idx, b) in vec.iter().enumerate() {
