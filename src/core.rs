@@ -233,226 +233,92 @@ impl Cpu {
             let opcode = self.mem_read(self.pc);
             self.pc += 1;
 
-            if let Some((name, size, mode)) = lookup_opcode(opcode) {
-                match name {
-                    OpName::TODO => todo!(),
+            let (name, size, mode) = lookup_opcode(opcode);
 
-                    OpName::ASL => self.asl(&mode),
-                    OpName::LDA => self.lda(&mode),
-                    OpName::LDX => self.ldx(&mode),
-                    OpName::LDY => self.ldy(&mode),
-                    OpName::LSR => self.lsr(&mode),
-                    OpName::STA => self.sta(&mode),
-                    OpName::STX => self.stx(&mode),
-                    OpName::STY => self.sty(&mode),
-                    OpName::BIT => self.bit(&mode),
+            let saved_pc = self.pc;
+            match name {
+                OpName::ADC => self.adc(&mode),
+                OpName::AND => self.and(&mode),
+                OpName::ASL => self.asl(&mode),
+                OpName::BIT => self.bit(&mode),
+                OpName::CMP => self.cmp(&mode),
+                OpName::CPX => self.cpx(&mode),
+                OpName::CPY => self.cpy(&mode),
+                OpName::DEC => self.dec(&mode),
+                OpName::EOR => self.eor(&mode),
+                OpName::INC => self.inc(&mode),
+                OpName::LDA => self.lda(&mode),
+                OpName::LDX => self.ldx(&mode),
+                OpName::LDY => self.ldy(&mode),
+                OpName::LSR => self.lsr(&mode),
+                OpName::NOP => self.nop(),
+                OpName::ORA => self.ora(&mode),
+                OpName::ROL => self.rol(&mode),
+                OpName::ROR => self.ror(&mode),
+                OpName::SBC => self.sbc(&mode),
+                OpName::STA => self.sta(&mode),
+                OpName::STX => self.stx(&mode),
+                OpName::STY => self.sty(&mode),
 
-                    OpName::NOP => self.nop(),
-                    OpName::TXS => self.txs(),
-                    OpName::TSX => self.tsx(),
-                    OpName::PHA => self.pha(),
-                    OpName::PLA => self.pla(),
-                    OpName::PHP => self.php(),
-                    OpName::PLP => self.plp(),
+                OpName::TXS => self.txs(),
+                OpName::TSX => self.tsx(),
+                OpName::PHA => self.pha(),
+                OpName::PLA => self.pla(),
+                OpName::PHP => self.php(),
+                OpName::PLP => self.plp(),
 
-                    OpName::ORA => self.ora(&mode),
-                    OpName::AND => self.and(&mode),
-                    OpName::ADC => self.adc(&mode),
-                    OpName::EOR => self.eor(&mode),
-                    OpName::CMP => self.cmp(&mode),
-                    OpName::CPX => self.cpx(&mode),
-                    OpName::CPY => self.cpy(&mode),
+                OpName::TAX => self.tax(),
+                OpName::TXA => self.txa(),
+                OpName::DEX => self.dex(),
+                OpName::INX => self.inx(),
+                OpName::TAY => self.tay(),
+                OpName::TYA => self.tya(),
+                OpName::DEY => self.dey(),
+                OpName::INY => self.iny(),
 
-                    OpName::TAX => self.tax(),
-                    OpName::TXA => self.txa(),
-                    OpName::DEX => self.dex(),
-                    OpName::INX => self.inx(),
-                    OpName::TAY => self.tay(),
-                    OpName::TYA => self.tya(),
-                    OpName::DEY => self.dey(),
-                    OpName::INY => self.iny(),
-                }
-                self.pc += size - 1;
+                OpName::CLC => self.set_flag(Flag::Carry, false),
+                OpName::SEC => self.set_flag(Flag::Carry, true),
+                OpName::CLI => self.set_flag(Flag::Interrupt, false),
+                OpName::SEI => self.set_flag(Flag::Interrupt, true),
+                OpName::CLV => self.set_flag(Flag::Overflow, false),
+                OpName::CLD => self.set_flag(Flag::Decimal, false),
+                OpName::SED => self.set_flag(Flag::Decimal, true),
 
-                continue;
-            }
+                OpName::BPL => self.bpl(),
+                OpName::BMI => self.bmi(),
+                OpName::BVC => self.bvc(),
+                OpName::BVS => self.bvs(),
+                OpName::BCC => self.bcc(),
+                OpName::BCS => self.bcs(),
+                OpName::BNE => self.bne(),
+                OpName::BEQ => self.beq(),
 
-            match opcode {
-                // Branch Instructions
-                0x10 => self.bpl(),
-                0x30 => self.bmi(),
-                0x50 => self.bvc(),
-                0x70 => self.bvs(),
-                0x90 => self.bcc(),
-                0xB0 => self.bcs(),
-                0xD0 => self.bne(),
-                0xF0 => self.beq(),
-
-                // DEC
-                0xC6 => {
-                    self.dec(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0xD6 => {
-                    self.dec(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0xCE => {
-                    self.dec(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0xDE => {
-                    self.dec(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-
-                // INC
-                0xE6 => {
-                    self.inc(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0xF6 => {
-                    self.inc(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0xEE => {
-                    self.inc(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0xFE => {
-                    self.inc(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-
-                // BRK
-                0x00 => {
-                    // self.set_flag(Flag::Break, true);
-                    return;
-                }
-
-                // JSR
-                0x20 => {
-                    let jump_dest = self.get_operand_address(&AddressingMode::Absolute);
+                OpName::JSR => {
+                    let jump_dest = self.get_operand_address(&mode);
                     // +2 for consumed u16 destination
                     // -1 because the spec says so
                     self.stack_push_u16(self.pc + 2 - 1);
                     self.pc = jump_dest;
                 }
 
-                // JMP
-                0x4C => {
-                    let jump_dest = self.get_operand_address(&AddressingMode::Absolute);
+                OpName::JMP => {
+                    let jump_dest = self.get_operand_address(&mode);
                     self.pc = jump_dest;
                 }
 
-                0x6C => {
-                    let jump_dest = self.get_operand_address(&AddressingMode::Indirect);
-                    self.pc = jump_dest;
+                OpName::BRK => {
+                    // self.set_flag(Flag::Break, true);
+                    return;
                 }
 
-                // ROL
-                0x2A => {
-                    self.rol(&AddressingMode::None);
-                }
-                0x26 => {
-                    self.rol(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x36 => {
-                    self.rol(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0x2E => {
-                    self.rol(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0x3E => {
-                    self.rol(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
+                OpName::RTI => self.rti(),
 
-                // ROR
-                0x6A => {
-                    self.ror(&AddressingMode::None);
-                }
-                0x66 => {
-                    self.ror(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x76 => {
-                    self.ror(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0x6E => {
-                    self.ror(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0x7E => {
-                    self.ror(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
+                OpName::RTS => self.rts(),
+            }
 
-                // RTI
-                0x40 => self.rti(),
-
-                // RTS
-                0x60 => self.rts(),
-
-                // SBC
-                0xE9 => {
-                    self.sbc(&AddressingMode::Immediate);
-                    self.pc += 1;
-                }
-                0xE5 => {
-                    self.sbc(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0xF5 => {
-                    self.sbc(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0xED => {
-                    self.sbc(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0xFD => {
-                    self.sbc(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-                0xF9 => {
-                    self.sbc(&AddressingMode::AbsoluteY);
-                    self.pc += 2;
-                }
-                0xE1 => {
-                    self.sbc(&AddressingMode::IndirectX);
-                    self.pc += 1;
-                }
-                0xF1 => {
-                    self.sbc(&AddressingMode::IndirectY);
-                    self.pc += 1;
-                }
-
-                // Flag (Processor Status) Instructions
-
-                // CLC (CLear Carry)
-                0x18 => self.set_flag(Flag::Carry, false),
-                // SEC (SEt Carry)
-                0x38 => self.set_flag(Flag::Carry, true),
-                // CLI (CLear Interrupt)
-                0x58 => self.set_flag(Flag::Interrupt, false),
-                // SEI (SEt Interrupt)
-                0x78 => self.set_flag(Flag::Interrupt, true),
-                // CLV (CLear oVerflow)
-                0xB8 => self.set_flag(Flag::Overflow, false),
-                // CLD (CLear Decimal)
-                0xD8 => self.set_flag(Flag::Decimal, false),
-                // SED (SEt Decimal)
-                0xF8 => self.set_flag(Flag::Decimal, true),
-
-                _ => {
-                    println!("Op {:#04x} not yet implemented", opcode);
-                    todo!();
-                }
+            // some operations modify the pc, like JMP. We shouldn't override that.
+            if self.pc == saved_pc {
+                self.pc += size - 1;
             }
         }
     }
@@ -933,68 +799,65 @@ impl Cpu {
 
         //// Address syntax by mode looks like:
 
-        if let Some(op) = lookup_opcode(code) {
-            let tla = format!("{}", op.0);
-            let addr_block = match op.2 {
-                AddressingMode::Immediate => format!("#${:02x}", param1),
-                AddressingMode::ZeroPage => format!("${:02x}", param1),
-                AddressingMode::ZeroPageX => format!("${:02x},X", param1),
-                AddressingMode::ZeroPageY => format!("${:02x},Y", param1),
-                AddressingMode::Absolute => format!("${:02x}{:02x}", param2, param1),
-                AddressingMode::AbsoluteX => format!("${:02x}{:02x},X", param2, param1),
-                AddressingMode::AbsoluteY => format!("${:02x}{:02x},Y", param2, param1),
-                AddressingMode::IndirectX => {
-                    let added = param1.wrapping_add(self.x);
-                    let target = self.mem_read_u16(added as u16);
-                    let data = self.mem_read(target);
-                    format!(
-                        "(${:02x},X) @ {:02x} = {:04x} = {:02X}",
-                        param1, added, target, data
-                    )
-                }
-                AddressingMode::IndirectY => {
-                    let val = self.mem_read_u16(param1 as u16);
-                    let val_plus_y = val + (self.y as u16);
-                    let data = self.mem_read(val_plus_y);
-                    format!(
-                        "(${:02x}),Y = {:04x} @ {:04x} = {:02X}",
-                        param1, val, val_plus_y, data
-                    )
-                }
-                // AddressingMode::None => todo!(),
-                // AddressingMode::Indirect => todo!(),
-                _ => "".to_string(),
-            };
+        let op = lookup_opcode(code);
+        let tla = format!("{}", op.0);
+        let addr_block = match op.2 {
+            AddressingMode::Immediate => format!("#${:02x}", param1),
+            AddressingMode::ZeroPage => format!("${:02x}", param1),
+            AddressingMode::ZeroPageX => format!("${:02x},X", param1),
+            AddressingMode::ZeroPageY => format!("${:02x},Y", param1),
+            AddressingMode::Absolute => format!("${:02x}{:02x}", param2, param1),
+            AddressingMode::AbsoluteX => format!("${:02x}{:02x},X", param2, param1),
+            AddressingMode::AbsoluteY => format!("${:02x}{:02x},Y", param2, param1),
+            AddressingMode::IndirectX => {
+                let added = param1.wrapping_add(self.x);
+                let target = self.mem_read_u16(added as u16);
+                let data = self.mem_read(target);
+                format!(
+                    "(${:02x},X) @ {:02x} = {:04x} = {:02X}",
+                    param1, added, target, data
+                )
+            }
+            AddressingMode::IndirectY => {
+                let val = self.mem_read_u16(param1 as u16);
+                let val_plus_y = val + (self.y as u16);
+                let data = self.mem_read(val_plus_y);
+                format!(
+                    "(${:02x}),Y = {:04x} @ {:04x} = {:02X}",
+                    param1, val, val_plus_y, data
+                )
+            }
+            // AddressingMode::None => todo!(),
+            // AddressingMode::Indirect => todo!(),
+            _ => "".to_string(),
+        };
 
-            format!(
-                "{:04X}  {:02X} {} {} {:>4} {:<28}A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}", //  PPU:{:>3},{:>3} CYC:{:>4}
-                self.pc,
-                code,
-                if op.1 >= 2 {
-                    format!("{:02X}", param1)
-                } else {
-                    "  ".to_string()
-                },
-                if op.1 >= 3 {
-                    format!("{:02X}", param2)
-                } else {
-                    "  ".to_string()
-                },
-                tla, // TODO: opname sometimes has * prefix like *NOP
-                addr_block,
-                self.a,
-                self.x,
-                self.y,
-                self.status,
-                self.sp,
-                // 0,
-                // 0,
-                // 0
-            )
-            .to_string()
-        } else {
-            format!("UNKNOWN OP (code={:02x}): TODO", code)
-        }
+        format!(
+            "{:04X}  {:02X} {} {} {:>4} {:<28}A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}", //  PPU:{:>3},{:>3} CYC:{:>4}
+            self.pc,
+            code,
+            if op.1 >= 2 {
+                format!("{:02X}", param1)
+            } else {
+                "  ".to_string()
+            },
+            if op.1 >= 3 {
+                format!("{:02X}", param2)
+            } else {
+                "  ".to_string()
+            },
+            tla, // TODO: opname sometimes has * prefix like *NOP
+            addr_block,
+            self.a,
+            self.x,
+            self.y,
+            self.status,
+            self.sp,
+            // 0,
+            // 0,
+            // 0
+        )
+        .to_string()
     }
 }
 
