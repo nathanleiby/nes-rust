@@ -2,7 +2,7 @@ use core::fmt;
 
 use crate::core::AddressingMode;
 
-// TODO: Stringify these
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpName {
     LDA,
@@ -32,14 +32,20 @@ pub enum OpName {
     CMP,
     CPX,
     CPY,
+    TAX,
+    TXA,
+    DEX,
+    INX,
+    TAY,
+    TYA,
+    DEY,
+    INY,
     // SetFlag(Flag, bool),
 }
 
 impl fmt::Display for OpName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            _ => write!(f, "{:?}", self),
-        }
+        write!(f, "{:?}", self)
     }
 }
 
@@ -161,6 +167,16 @@ pub fn lookup_opcode(code: u8) -> Option<Op> {
         0x19 => (OpName::ORA, 3, AddressingMode::AbsoluteY),
         0x01 => (OpName::ORA, 2, AddressingMode::IndirectX),
         0x11 => (OpName::ORA, 2, AddressingMode::IndirectY),
+
+        // Register Instructions
+        0xAA => (OpName::TAX, 1, AddressingMode::None),
+        0x8A => (OpName::TXA, 1, AddressingMode::None),
+        0xCA => (OpName::DEX, 1, AddressingMode::None),
+        0xE8 => (OpName::INX, 1, AddressingMode::None),
+        0xA8 => (OpName::TAY, 1, AddressingMode::None),
+        0x98 => (OpName::TYA, 1, AddressingMode::None),
+        0x88 => (OpName::DEY, 1, AddressingMode::None),
+        0xC8 => (OpName::INY, 1, AddressingMode::None),
 
         _ => (OpName::TODO, 0, AddressingMode::None),
     };

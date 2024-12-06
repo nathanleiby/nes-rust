@@ -51,8 +51,8 @@ pub enum AddressingMode {
 pub enum Flag {
     Negative,
     Overflow,
-    Break2,
-    Break,
+    // Break2,
+    // Break,
     Decimal,
     Interrupt,
     Zero,
@@ -100,11 +100,11 @@ impl Cpu {
         let rom = Rom::new_test_rom(vec![]);
         Cpu {
             pc: 0,
-            sp: 0xfd, // TODO: should it be inited to FD? or should something be put on it immediately?
+            sp: 0xfd,
             a: 0,
             x: 0,
             y: 0,
-            status: 0,
+            status: 0b100100,
             bus: Bus::new(rom),
         }
     }
@@ -215,8 +215,9 @@ impl Cpu {
         self.a = 0;
         self.x = 0;
         self.y = 0;
-        self.sp = 0xff;
+        self.sp = 0xfd;
         self.pc = self.mem_read_u16(0xFFFC);
+        // self.status = 0b100100; // TODO: This breaks my unit tests, but seems correct
         self.status = 0; // TODO: is this the correct initial state? I see various tests where both break flags are on
     }
 
@@ -243,6 +244,7 @@ impl Cpu {
                     OpName::STX => self.stx(&mode),
                     OpName::STY => self.sty(&mode),
                     OpName::BIT => self.bit(&mode),
+
                     OpName::NOP => self.nop(),
                     OpName::TXS => self.txs(),
                     OpName::TSX => self.tsx(),
@@ -250,6 +252,7 @@ impl Cpu {
                     OpName::PLA => self.pla(),
                     OpName::PHP => self.php(),
                     OpName::PLP => self.plp(),
+
                     OpName::ORA => self.ora(&mode),
                     OpName::AND => self.and(&mode),
                     OpName::ADC => self.adc(&mode),
@@ -257,6 +260,15 @@ impl Cpu {
                     OpName::CMP => self.cmp(&mode),
                     OpName::CPX => self.cpx(&mode),
                     OpName::CPY => self.cpy(&mode),
+
+                    OpName::TAX => self.tax(),
+                    OpName::TXA => self.txa(),
+                    OpName::DEX => self.dex(),
+                    OpName::INX => self.inx(),
+                    OpName::TAY => self.tay(),
+                    OpName::TYA => self.tya(),
+                    OpName::DEY => self.dey(),
+                    OpName::INY => self.iny(),
                 }
                 self.pc += size - 1;
 
@@ -383,16 +395,6 @@ impl Cpu {
 
                 // RTS
                 0x60 => self.rts(),
-
-                // Register Instructions
-                0xAA => self.tax(),
-                0x8A => self.txa(),
-                0xCA => self.dex(),
-                0xE8 => self.inx(),
-                0xA8 => self.tay(),
-                0x98 => self.tya(),
-                0x88 => self.dey(),
-                0xC8 => self.iny(),
 
                 // SBC
                 0xE9 => {
@@ -887,8 +889,8 @@ impl Cpu {
             Flag::Zero => 1,
             Flag::Interrupt => 2,
             Flag::Decimal => 3,
-            Flag::Break => 4,
-            Flag::Break2 => 5,
+            // Flag::Break => 4,
+            // Flag::Break2 => 5,
             Flag::Overflow => 6,
             Flag::Negative => 7,
         };
@@ -909,8 +911,8 @@ impl Cpu {
             Flag::Zero => 1,
             Flag::Interrupt => 2,
             Flag::Decimal => 3,
-            Flag::Break => 4,
-            Flag::Break2 => 5,
+            // Flag::Break => 4,
+            // Flag::Break2 => 5,
             Flag::Overflow => 6,
             Flag::Negative => 7,
         };
@@ -1611,8 +1613,8 @@ mod tests {
         bus.mem_write(101, 0x33);
 
         //data
-        bus.mem_write(0x33, 00);
-        bus.mem_write(0x34, 04);
+        bus.mem_write(0x33, 0);
+        bus.mem_write(0x34, 4);
 
         //target cell
         bus.mem_write(0x400, 0xAA);
