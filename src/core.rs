@@ -51,9 +51,8 @@ pub enum AddressingMode {
 pub enum Flag {
     Negative,
     Overflow,
-    // TODO
-    // Break,
-    // Break2,
+    Break2,
+    Break,
     Decimal,
     Interrupt,
     Zero,
@@ -218,6 +217,7 @@ impl Cpu {
         self.y = 0;
         self.sp = 0xff;
         self.pc = self.mem_read_u16(0xFFFC);
+        self.status = 0; // TODO: is this the correct initial state? I see various tests where both break flags are on
     }
 
     pub fn run_with_callback<F>(&mut self, mut callback: F)
@@ -232,6 +232,8 @@ impl Cpu {
 
             if let Some((name, size, mode)) = lookup_opcode(opcode) {
                 match name {
+                    OpName::TODO => todo!(),
+
                     OpName::ASL => self.asl(&mode),
                     OpName::LDA => self.lda(&mode),
                     OpName::LDX => self.ldx(&mode),
@@ -240,7 +242,6 @@ impl Cpu {
                     OpName::STA => self.sta(&mode),
                     OpName::STX => self.stx(&mode),
                     OpName::STY => self.sty(&mode),
-                    OpName::TODO => todo!(),
                     OpName::BIT => self.bit(&mode),
                     OpName::NOP => self.nop(),
                     OpName::TXS => self.txs(),
@@ -250,6 +251,12 @@ impl Cpu {
                     OpName::PHP => self.php(),
                     OpName::PLP => self.plp(),
                     OpName::ORA => self.ora(&mode),
+                    OpName::AND => self.and(&mode),
+                    OpName::ADC => self.adc(&mode),
+                    OpName::EOR => self.eor(&mode),
+                    OpName::CMP => self.cmp(&mode),
+                    OpName::CPX => self.cpx(&mode),
+                    OpName::CPY => self.cpy(&mode),
                 }
                 self.pc += size - 1;
 
@@ -257,108 +264,6 @@ impl Cpu {
             }
 
             match opcode {
-                // AND
-                0x29 => {
-                    self.and(&AddressingMode::Immediate);
-                    self.pc += 1;
-                }
-                0x25 => {
-                    self.and(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x35 => {
-                    self.and(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0x2D => {
-                    self.and(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0x3D => {
-                    self.and(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-                0x39 => {
-                    self.and(&AddressingMode::AbsoluteY);
-                    self.pc += 2;
-                }
-                0x21 => {
-                    self.and(&AddressingMode::IndirectX);
-                    self.pc += 1;
-                }
-                0x31 => {
-                    self.and(&AddressingMode::IndirectY);
-                    self.pc += 1;
-                }
-
-                // ADC
-                0x69 => {
-                    self.adc(&AddressingMode::Immediate);
-                    self.pc += 1;
-                }
-                0x65 => {
-                    self.adc(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x75 => {
-                    self.adc(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0x6D => {
-                    self.adc(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0x7D => {
-                    self.adc(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-                0x79 => {
-                    self.adc(&AddressingMode::AbsoluteY);
-                    self.pc += 2;
-                }
-                0x61 => {
-                    self.adc(&AddressingMode::IndirectX);
-                    self.pc += 1;
-                }
-                0x71 => {
-                    self.adc(&AddressingMode::IndirectY);
-                    self.pc += 1;
-                }
-
-                // EOR
-                0x49 => {
-                    self.eor(&AddressingMode::Immediate);
-                    self.pc += 1;
-                }
-                0x45 => {
-                    self.eor(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0x55 => {
-                    self.eor(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0x4D => {
-                    self.eor(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0x5D => {
-                    self.eor(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-                0x59 => {
-                    self.eor(&AddressingMode::AbsoluteY);
-                    self.pc += 2;
-                }
-                0x41 => {
-                    self.eor(&AddressingMode::IndirectX);
-                    self.pc += 1;
-                }
-                0x51 => {
-                    self.eor(&AddressingMode::IndirectY);
-                    self.pc += 1;
-                }
-
                 // Branch Instructions
                 0x10 => self.bpl(),
                 0x30 => self.bmi(),
@@ -368,68 +273,6 @@ impl Cpu {
                 0xB0 => self.bcs(),
                 0xD0 => self.bne(),
                 0xF0 => self.beq(),
-
-                // CMP
-                0xC9 => {
-                    self.cmp(&AddressingMode::Immediate);
-                    self.pc += 1;
-                }
-                0xC5 => {
-                    self.cmp(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0xD5 => {
-                    self.cmp(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0xCD => {
-                    self.cmp(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0xDD => {
-                    self.cmp(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-                0xD9 => {
-                    self.cmp(&AddressingMode::AbsoluteY);
-                    self.pc += 2;
-                }
-                0xC1 => {
-                    self.cmp(&AddressingMode::IndirectX);
-                    self.pc += 1;
-                }
-                0xD1 => {
-                    self.cmp(&AddressingMode::IndirectY);
-                    self.pc += 1;
-                }
-
-                // CPX
-                0xE0 => {
-                    self.cpx(&AddressingMode::Immediate);
-                    self.pc += 1;
-                }
-                0xE4 => {
-                    self.cpx(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0xEC => {
-                    self.cpx(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-
-                // CPY
-                0xC0 => {
-                    self.cpy(&AddressingMode::Immediate);
-                    self.pc += 1;
-                }
-                0xC4 => {
-                    self.cpy(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0xCC => {
-                    self.cpy(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
 
                 // DEC
                 0xC6 => {
@@ -468,7 +311,10 @@ impl Cpu {
                 }
 
                 // BRK
-                0x00 => return,
+                0x00 => {
+                    // self.set_flag(Flag::Break, true);
+                    return;
+                }
 
                 // JSR
                 0x20 => {
@@ -945,6 +791,8 @@ impl Cpu {
     fn rti(&mut self) {
         self.status = self.stack_pop();
         self.pc = self.stack_pop_u16();
+        // self.set_flag(Flag::Break, false);
+        // self.set_flag(Flag::Break2, true);
     }
 
     /// SBC (SuBtract with Carry)
@@ -1009,12 +857,15 @@ impl Cpu {
 
     /// PHP (PusH Processor status)
     fn php(&mut self) {
-        self.stack_push(self.status)
+        self.stack_push(self.status);
+        // self.set_flag(Flag::Break, true);
     }
 
     /// PLP (PuLl Processor status)
     fn plp(&mut self) {
-        self.status = self.stack_pop()
+        self.status = self.stack_pop();
+        // self.set_flag(Flag::Interrupt, true);
+        // self.set_flag(Flag::Break, true);
     }
 
     //
@@ -1036,8 +887,8 @@ impl Cpu {
             Flag::Zero => 1,
             Flag::Interrupt => 2,
             Flag::Decimal => 3,
-            // Flag::Break => 4,
-            // Flag::Break2 => 5,
+            Flag::Break => 4,
+            Flag::Break2 => 5,
             Flag::Overflow => 6,
             Flag::Negative => 7,
         };
@@ -1058,8 +909,8 @@ impl Cpu {
             Flag::Zero => 1,
             Flag::Interrupt => 2,
             Flag::Decimal => 3,
-            // Flag::Break => 4,
-            // Flag::Break2 => 5,
+            Flag::Break => 4,
+            Flag::Break2 => 5,
             Flag::Overflow => 6,
             Flag::Negative => 7,
         };
@@ -1078,30 +929,33 @@ impl Cpu {
 
         //// Address syntax by mode looks like:
 
-        // MODE           SYNTAX       HEX LEN TIM
-        // Immediate     SBC #$44      $E9  2   2
-        // Zero Page     SBC $44       $E5  2   3
-        // Zero Page,X   SBC $44,X     $F5  2   4
-        // Absolute      SBC $4400     $ED  3   4
-        // Absolute,X    SBC $4400,X   $FD  3   4+
-        // Absolute,Y    SBC $4400,Y   $F9  3   4+
-        // Indirect,X    SBC ($44,X)   $E1  2   6
-        // Indirect,Y    SBC ($44),Y   $F1  2   5+
-
-        println!("code = {:02x}", code);
         if let Some(op) = lookup_opcode(code) {
             let tla = format!("{}", op.0);
             let addr_block = match op.2 {
-                // AddressingMode::Immediate => todo!(),
-                // AddressingMode::ZeroPage => todo!(),
-                // AddressingMode::ZeroPageX => todo!(),
-                // AddressingMode::ZeroPageY => todo!(),
-                // AddressingMode::Absolute => todo!(),
-                // AddressingMode::AbsoluteX => todo!(),
-                // AddressingMode::AbsoluteY => todo!(),
-                // AddressingMode::IndirectX => todo!(),
+                AddressingMode::Immediate => format!("#${:02x}", param1),
+                AddressingMode::ZeroPage => format!("${:02x}", param1),
+                AddressingMode::ZeroPageX => format!("${:02x},X", param1),
+                AddressingMode::ZeroPageY => format!("${:02x},Y", param1),
+                AddressingMode::Absolute => format!("${:02x}{:02x}", param2, param1),
+                AddressingMode::AbsoluteX => format!("${:02x}{:02x},X", param2, param1),
+                AddressingMode::AbsoluteY => format!("${:02x}{:02x},Y", param2, param1),
+                AddressingMode::IndirectX => {
+                    let added = param1.wrapping_add(self.x);
+                    let target = self.mem_read_u16(added as u16);
+                    let data = self.mem_read(target);
+                    format!(
+                        "(${:02x},X) @ {:02x} = {:04x} = {:02X}",
+                        param1, added, target, data
+                    )
+                }
                 AddressingMode::IndirectY => {
-                    format!("(${:02x}),Y = {:04x} @ {:04x}", param1, param1, param1)
+                    let val = self.mem_read_u16(param1 as u16);
+                    let val_plus_y = val + (self.y as u16);
+                    let data = self.mem_read(val_plus_y);
+                    format!(
+                        "(${:02x}),Y = {:04x} @ {:04x} = {:02X}",
+                        param1, val, val_plus_y, data
+                    )
                 }
                 // AddressingMode::None => todo!(),
                 // AddressingMode::Indirect => todo!(),
@@ -1135,7 +989,7 @@ impl Cpu {
             )
             .to_string()
         } else {
-            "".to_string()
+            "UNKNOWN OP: TODO".to_string()
         }
     }
 }
