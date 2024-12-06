@@ -7,6 +7,7 @@ use std::time::Duration;
 
 mod bus;
 mod core;
+mod ops;
 mod rom;
 
 use rand::random;

@@ -1,4 +1,8 @@
-use crate::{bus::Bus, rom::Rom};
+use crate::{
+    bus::Bus,
+    ops::{parse_opcode, OpName},
+    rom::Rom,
+};
 
 /// CPU (Central Processing Unit)
 /// The NES uses  2A03, which is a modified version of the 6502 chip.
@@ -223,42 +227,53 @@ impl Cpu {
         loop {
             callback(self);
 
-            let op = self.mem_read(self.pc);
+            let opcode = self.mem_read(self.pc);
             self.pc += 1;
-            match op {
-                // LDA
-                0xA9 => {
-                    self.lda(&AddressingMode::Immediate);
-                    self.pc += 1;
+
+            if let Some(op) = parse_opcode(opcode) {
+                match op.0 {
+                    OpName::LDA => self.lda(&op.2),
+                    _ => todo!(),
                 }
-                0xA5 => {
-                    self.lda(&AddressingMode::ZeroPage);
-                    self.pc += 1;
-                }
-                0xB5 => {
-                    self.lda(&AddressingMode::ZeroPageX);
-                    self.pc += 1;
-                }
-                0xAD => {
-                    self.lda(&AddressingMode::Absolute);
-                    self.pc += 2;
-                }
-                0xBD => {
-                    self.lda(&AddressingMode::AbsoluteX);
-                    self.pc += 2;
-                }
-                0xB9 => {
-                    self.lda(&AddressingMode::AbsoluteY);
-                    self.pc += 2;
-                }
-                0xA1 => {
-                    self.lda(&AddressingMode::IndirectX);
-                    self.pc += 1;
-                }
-                0xB1 => {
-                    self.lda(&AddressingMode::IndirectY);
-                    self.pc += 1;
-                }
+                self.pc += op.1;
+
+                continue;
+            }
+
+            match opcode {
+                // // LDA
+                // 0xA9 => {
+                //     self.lda(&AddressingMode::Immediate);
+                //     self.pc += 1;
+                // }
+                // 0xA5 => {
+                //     self.lda(&AddressingMode::ZeroPage);
+                //     self.pc += 1;
+                // }
+                // 0xB5 => {
+                //     self.lda(&AddressingMode::ZeroPageX);
+                //     self.pc += 1;
+                // }
+                // 0xAD => {
+                //     self.lda(&AddressingMode::Absolute);
+                //     self.pc += 2;
+                // }
+                // 0xBD => {
+                //     self.lda(&AddressingMode::AbsoluteX);
+                //     self.pc += 2;
+                // }
+                // 0xB9 => {
+                //     self.lda(&AddressingMode::AbsoluteY);
+                //     self.pc += 2;
+                // }
+                // 0xA1 => {
+                //     self.lda(&AddressingMode::IndirectX);
+                //     self.pc += 1;
+                // }
+                // 0xB1 => {
+                //     self.lda(&AddressingMode::IndirectY);
+                //     self.pc += 1;
+                // }
 
                 // LDX
                 0xA2 => {
@@ -806,7 +821,7 @@ impl Cpu {
                 0xF8 => self.set_flag(Flag::Decimal, true),
 
                 _ => {
-                    println!("Op {:#04x} not yet implemented", op);
+                    println!("Op {:#04x} not yet implemented", opcode);
                     todo!();
                 }
             }
