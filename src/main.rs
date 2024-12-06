@@ -7,6 +7,7 @@ use std::time::Duration;
 
 mod bus;
 mod core;
+mod macros;
 mod ops;
 mod rom;
 

@@ -219,8 +219,8 @@ impl Cpu {
         self.y = 0;
         self.sp = DEFAULT_STACK_POINTER;
         self.pc = self.mem_read_u16(0xFFFC);
-        // self.status = DEFAULT_STATUS; // TODO: This breaks my unit tests, but seems correct
-        self.status = 0; // TODO: is this the correct initial state? I see various tests where both break flags are on
+        // self.pc = 0xC000; // TODO: why is it saying 0xC004 normally when running nestest.nes ??
+        self.status = DEFAULT_STATUS;
     }
 
     pub fn run_with_callback<F>(&mut self, mut callback: F)
@@ -385,8 +385,6 @@ impl Cpu {
         let displacement = self.mem_read(self.pc) as i8;
 
         self.pc += 1;
-
-        println!("is_set={:?} displacement = {:?}", is_set, displacement);
 
         if self.get_flag(flag) == is_set {
             self.pc = (self.pc as isize + displacement as isize) as u16
@@ -802,28 +800,28 @@ impl Cpu {
         let op = lookup_opcode(code);
         let tla = format!("{}", op.0);
         let addr_block = match op.2 {
-            AddressingMode::Immediate => format!("#${:02x}", param1),
-            AddressingMode::ZeroPage => format!("${:02x}", param1),
-            AddressingMode::ZeroPageX => format!("${:02x},X", param1),
-            AddressingMode::ZeroPageY => format!("${:02x},Y", param1),
-            AddressingMode::Absolute => format!("${:02x}{:02x}", param2, param1),
-            AddressingMode::AbsoluteX => format!("${:02x}{:02x},X", param2, param1),
-            AddressingMode::AbsoluteY => format!("${:02x}{:02x},Y", param2, param1),
+            AddressingMode::Immediate => format!("#${:02X}", param1),
+            AddressingMode::ZeroPage => format!("${:02X}", param1),
+            AddressingMode::ZeroPageX => format!("${:02X},X", param1),
+            AddressingMode::ZeroPageY => format!("${:02X},Y", param1),
+            AddressingMode::Absolute => format!("${:02X}{:02X}", param2, param1),
+            AddressingMode::AbsoluteX => format!("${:02X}{:02X},X", param2, param1),
+            AddressingMode::AbsoluteY => format!("${:02X}{:02X},Y", param2, param1),
             AddressingMode::IndirectX => {
                 let added = param1.wrapping_add(self.x);
                 let target = self.mem_read_u16(added as u16);
                 let data = self.mem_read(target);
                 format!(
-                    "(${:02x},X) @ {:02x} = {:04x} = {:02X}",
+                    "(${:02X},X) @ {:02X} = {:04X} = {:02X}",
                     param1, added, target, data
                 )
             }
             AddressingMode::IndirectY => {
                 let val = self.mem_read_u16(param1 as u16);
-                let val_plus_y = val + (self.y as u16);
+                let val_plus_y = val.wrapping_add(self.y as u16);
                 let data = self.mem_read(val_plus_y);
                 format!(
-                    "(${:02x}),Y = {:04x} @ {:04x} = {:02X}",
+                    "(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
                     param1, val, val_plus_y, data
                 )
             }
@@ -863,7 +861,7 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
-    use crate::bus::PRG_ROM_START;
+    use crate::{assert_eq_bits, bus::PRG_ROM_START};
 
     use super::*;
 
@@ -874,7 +872,7 @@ mod tests {
         cpu.reset();
         cpu._run();
         assert_eq!(cpu.a, 0x55);
-        assert_eq!(cpu.status, 0b0000_0000);
+        assert_eq!(cpu.status, 0b0010_0100);
     }
 
     #[test]
@@ -882,7 +880,7 @@ mod tests {
         let mut cpu = Cpu::new();
         cpu._load_and_run(vec![0xa9, 0x00, 0x00]);
         assert_eq!(cpu.a, 0x00);
-        assert_eq!(cpu.status, 0b0000_0010);
+        assert_eq!(cpu.status, 0b0010_0110);
     }
 
     #[test]
@@ -998,7 +996,7 @@ mod tests {
         cpu.a = 123;
         cpu._run();
         assert_eq!(cpu.x, 123);
-        assert_eq!(cpu.status, 0b0000_0000);
+        assert_eq!(cpu.status, 0b0010_0100);
     }
 
     #[test]
@@ -1010,7 +1008,7 @@ mod tests {
         cpu.a = 0;
         cpu._run();
         assert_eq!(cpu.x, 0);
-        assert_eq!(cpu.status, 0b0000_0010);
+        assert_eq!(cpu.status, 0b0010_0110);
     }
 
     #[test]
@@ -1074,7 +1072,7 @@ mod tests {
         cpu.a = 0xf0;
         cpu._run();
         assert_eq!(cpu.a, 0xff);
-        assert_eq!(cpu.status, 0b1000_0000);
+        assert_eq!(cpu.get_flag(Flag::Negative), true);
     }
 
     #[test]
@@ -1085,14 +1083,17 @@ mod tests {
         cpu.a = 0xf0;
         cpu._run();
         assert_eq!(cpu.a, 0x00);
-        assert_eq!(cpu.status, 0b0000_0010);
+        assert_eq!(cpu.get_flag(Flag::Zero), true);
     }
 
     #[test]
     fn test_flag_processor_status_instructions_set_flags() {
         let mut cpu = Cpu::new();
-        cpu._load_and_run(vec![0x38, 0x78, 0xF8]);
-        assert_eq!(cpu.status, 0b0000_1101);
+        cpu._load_test_rom(vec![0x38, 0x78, 0xF8]);
+        cpu.reset();
+        cpu.status = 0x00;
+        cpu._run();
+        assert_eq_bits!(cpu.status, 0b0000_1101);
     }
 
     #[test]
@@ -1128,7 +1129,7 @@ mod tests {
         let mut cpu = Cpu::new();
         cpu._load_and_run(vec![0x69, 123]);
         assert_eq!(cpu.a, 123);
-        assert_eq!(cpu.status, 0b0000_0000);
+        assert_eq!(cpu.status, 0b0010_0100);
     }
 
     #[test]
@@ -1278,12 +1279,12 @@ mod tests {
             // equal to
             let mut cpu = Cpu::new();
             cpu._load_and_run(vec![instruction, 0x00]);
-            assert_eq!(cpu.status, 0b0000_0011);
+            assert_eq_bits!(cpu.status, 0b0010_0111);
 
             // greater than
             let mut cpu = Cpu::new();
             cpu._load_and_run(vec![instruction, 0x01]);
-            assert_eq!(cpu.status, 0b0000_0000);
+            assert_eq_bits!(cpu.status, 0b0010_0100);
 
             // less than
             let mut cpu = Cpu::new();
@@ -1295,7 +1296,7 @@ mod tests {
                 Register::Y => cpu.y = 0x02,
             }
             cpu._run();
-            assert_eq!(cpu.status, 0b0000_0001);
+            assert_eq_bits!(cpu.status, 0b0010_0101);
 
             // ensure sets Negative flag, if applicable
             let mut cpu = Cpu::new();
@@ -1307,7 +1308,7 @@ mod tests {
                 Register::Y => cpu.y = 0x81,
             }
             cpu._run();
-            assert_eq!(cpu.status, 0b1000_0011);
+            assert_eq_bits!(cpu.status, 0b1010_0111);
         }
     }
 
@@ -1338,7 +1339,7 @@ mod tests {
         cpu.a = 0b0011_1100;
         cpu._run();
         assert_eq!(cpu.a, 0b1100_1100);
-        assert_eq!(cpu.status, 0b1000_0000);
+        assert_eq_bits!(cpu.status, 0b1010_0100);
     }
 
     #[test]
