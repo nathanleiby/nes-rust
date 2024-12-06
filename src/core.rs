@@ -1,3 +1,5 @@
+use std::env;
+
 use crate::{
     bus::Bus,
     ops::{lookup_opcode, OpName},
@@ -219,7 +221,9 @@ impl Cpu {
         self.y = 0;
         self.sp = DEFAULT_STACK_POINTER;
         self.pc = self.mem_read_u16(0xFFFC);
-        // self.pc = 0xC000; // TODO: why is it saying 0xC004 normally when running nestest.nes ??
+        if env::var("NESTEST_HACK").is_ok() {
+            self.pc = 0xC000; // TODO: why is it saying 0xC004 normally when running nestest.nes ??
+        }
         self.status = DEFAULT_STATUS;
     }
 
