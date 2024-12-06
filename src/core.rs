@@ -58,7 +58,7 @@ enum Flag {
 
 // TODO: restore this later. It's hard-coded to support Snake right now
 // const CPU_START: u16 = 0x8000;
-const CPU_START: usize = 0x0600;
+pub const CPU_START: usize = 0x0600;
 
 pub trait Mem {
     fn mem_read(&self, addr: u16) -> u8;

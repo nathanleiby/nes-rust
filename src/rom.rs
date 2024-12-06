@@ -1,3 +1,5 @@
+use crate::core::CPU_START;
+
 #[derive(PartialEq, Eq, Debug)]
 enum Mirroring {
     FourScreen,
@@ -79,7 +81,7 @@ impl Rom {
 
     pub fn new_test_rom(vec: Vec<u8>) -> Rom {
         let mut prg_rom: Vec<u8> = [0; 0x8000].to_vec();
-        let program_start = 0x600;
+        let program_start = CPU_START;
         for (idx, b) in vec.iter().enumerate() {
             prg_rom[program_start + idx] = *b;
         }
