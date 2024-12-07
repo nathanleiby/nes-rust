@@ -434,8 +434,8 @@ impl Cpu {
         let value = self.mem_read(addr);
 
         self.set_flag(Flag::Zero, self.a & value == 0);
-        self.set_flag(Flag::Negative, 0b0100_0000 & value > 0);
-        self.set_flag(Flag::Overflow, 0b0010_0000 & value > 0);
+        self.set_flag(Flag::Negative, (1 << 7) & value > 0);
+        self.set_flag(Flag::Overflow, (1 << 6) & value > 0);
     }
 
     // Comparisons //
@@ -1445,7 +1445,7 @@ mod tests {
         let bit_absolute = 0x2C;
         cpu._load_test_rom(vec![bit_absolute, 0x22, 0x11, 0x00]);
         cpu.reset();
-        cpu.mem_write(0x1122, 0b0110_0000);
+        cpu.mem_write(0x1122, 0b1100_0000);
         cpu.a = 0b0000_1111;
         cpu._run();
 
@@ -1457,17 +1457,12 @@ mod tests {
         let bit_zeropage = 0x24;
         cpu._load_test_rom(vec![bit_zeropage, 0x01]);
         cpu.reset();
-        cpu.mem_write(0x01, 0x40); //0b0110_1101);
-        cpu.status = 0x6d;
-        cpu.a = 0x40; // 0b0100_0000;
+        cpu.mem_write(0x01, 0x40);
+        cpu.status = 0x6D;
+        cpu.a = 0x40;
         cpu._run();
 
-        assert_eq_bits!(cpu.status, 0xAD); //0b10101101);
-                                           // assert!(cpu.get_flag(Flag::Zero));
-                                           // assert!(cpu.get_flag(Flag::Negative));
-                                           // assert!(cpu.get_flag(Flag::Overflow));
-                                           //         C7F8  24 01     BIT $01 = 40                    A:40 X:00 Y:00 P:6D SP:FB
-                                           // C7FA  D8        CLD                             A:40 X:00 Y:00 P:AD SP:FB
+        assert_eq_bits!(cpu.status, 0x6D);
     }
 
     #[test]
@@ -1558,7 +1553,7 @@ mod tests {
             Err(e) => e.into_inner(),
         };
 
-        let max_known_good_line = 79;
+        let max_known_good_line = 103;
         for (idx, e) in expected.lines().enumerate() {
             let line_num = idx + 1;
             if line_num > max_known_good_line {
