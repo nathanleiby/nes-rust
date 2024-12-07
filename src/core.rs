@@ -736,7 +736,16 @@ impl Cpu {
 
     /// PLP (PuLl Processor status)
     fn plp(&mut self) {
-        self.status = self.stack_pop();
+        let val = self.stack_pop();
+
+        let ignore_b = val & 0b1100_1111; // ignore b from stack value
+        self.status &= 0b0011_0000; // keep b if it was set before
+
+        self.status |= ignore_b;
+
+        // TODO: Note that the effect of changing I is delayed one instruction
+        // because the flag is changed after IRQ is polled, delaying the effect until IRQ is polled in the next instruction like with CLI and SEI.
+
         // self.set_flag(Flag::Interrupt, true);
         // self.set_flag(Flag::Break, true);
     }
@@ -1553,7 +1562,7 @@ mod tests {
             Err(e) => e.into_inner(),
         };
 
-        let max_known_good_line = 103;
+        let max_known_good_line = 158;
         for (idx, e) in expected.lines().enumerate() {
             let line_num = idx + 1;
             if line_num > max_known_good_line {
