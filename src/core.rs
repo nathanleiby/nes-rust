@@ -343,12 +343,18 @@ impl Cpu {
     fn adc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let param = self.mem_read(addr);
-        let (new_val, overflow) = self.a.overflowing_add(param);
-        self.a = new_val;
+        let (mid, overflow) = self.a.overflowing_add(param);
 
-        self.set_zero_and_negative_flags(new_val);
-        self.set_flag(Flag::Carry, overflow);
-        self.set_flag(Flag::Overflow, false); // TODO: not implemented -- fix it for snake to work?
+        let c = if self.get_flag(Flag::Carry) { 1 } else { 0 };
+        let (result, overflow2) = mid.overflowing_add(c);
+
+        self.set_zero_and_negative_flags(result);
+        self.set_flag(Flag::Carry, overflow || overflow2);
+
+        let v = (result ^ self.a) & (result ^ param) & 0x80;
+        self.set_flag(Flag::Overflow, v > 0);
+
+        self.a = result;
     }
 
     /// AND (bitwise AND with accumulator)
@@ -1527,6 +1533,8 @@ mod tests {
 
     #[test]
     fn test_nestest() {
+        let max_known_good_line = 313;
+
         let program = fs::read("roms/nestest.nes").unwrap();
 
         let mut cpu = Cpu::new();
@@ -1552,7 +1560,6 @@ mod tests {
             Err(e) => e.into_inner(),
         };
 
-        let max_known_good_line = 230;
         for (idx, e) in expected.lines().enumerate() {
             let line_num = idx + 1;
             if line_num > max_known_good_line {
