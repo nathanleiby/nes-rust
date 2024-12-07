@@ -729,7 +729,8 @@ impl Cpu {
 
     /// PHP (PusH Processor status)
     fn php(&mut self) {
-        self.stack_push(self.status);
+        // The B flag and extra bit are both pushed as 1.
+        self.stack_push(self.status | 0b0011_0000);
         // self.set_flag(Flag::Break, true);
     }
 
@@ -804,16 +805,12 @@ impl Cpu {
         let op = lookup_opcode(code);
         let (name, size, mode) = op;
 
-        let op_addr: u16 = if mode != AddressingMode::None && mode != AddressingMode::Relative {
-            self.get_operand_address(&mode)
-        } else {
-            0
-        };
-
         let tla = format!("{}", name);
         let addr_block = match mode {
             AddressingMode::Immediate => format!("#${:02X}", param1),
-            AddressingMode::ZeroPage => format!("${:02X} = {:02X}", param1, self.mem_read(op_addr)),
+            AddressingMode::ZeroPage => {
+                format!("${:02X} = {:02X}", param1, self.mem_read(param1 as u16))
+            }
             AddressingMode::ZeroPageX => format!("${:02X},X", param1),
             AddressingMode::ZeroPageY => format!("${:02X},Y", param1),
             AddressingMode::Absolute => format!("${:02X}{:02X}", param2, param1),
@@ -1455,6 +1452,22 @@ mod tests {
         assert!(cpu.get_flag(Flag::Zero));
         assert!(cpu.get_flag(Flag::Negative));
         assert!(cpu.get_flag(Flag::Overflow));
+
+        let mut cpu = Cpu::new();
+        let bit_zeropage = 0x24;
+        cpu._load_test_rom(vec![bit_zeropage, 0x01]);
+        cpu.reset();
+        cpu.mem_write(0x01, 0x40); //0b0110_1101);
+        cpu.status = 0x6d;
+        cpu.a = 0x40; // 0b0100_0000;
+        cpu._run();
+
+        assert_eq_bits!(cpu.status, 0xAD); //0b10101101);
+                                           // assert!(cpu.get_flag(Flag::Zero));
+                                           // assert!(cpu.get_flag(Flag::Negative));
+                                           // assert!(cpu.get_flag(Flag::Overflow));
+                                           //         C7F8  24 01     BIT $01 = 40                    A:40 X:00 Y:00 P:6D SP:FB
+                                           // C7FA  D8        CLD                             A:40 X:00 Y:00 P:AD SP:FB
     }
 
     #[test]
@@ -1533,6 +1546,7 @@ mod tests {
         let mutex_result = Mutex::new(result);
         let _ = std::panic::catch_unwind(|| {
             mutex_cpu.lock().unwrap().run_with_callback(|cpu| {
+                // TODO: consider exciting earlier, diffing at each step
                 mutex_result.lock().unwrap().push(cpu.trace());
             })
         });
@@ -1544,7 +1558,7 @@ mod tests {
             Err(e) => e.into_inner(),
         };
 
-        let max_known_good_line = 37;
+        let max_known_good_line = 79;
         for (idx, e) in expected.lines().enumerate() {
             let line_num = idx + 1;
             if line_num > max_known_good_line {
