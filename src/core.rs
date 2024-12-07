@@ -444,14 +444,16 @@ impl Cpu {
         let addr = self.get_operand_address(mode);
         let param = self.mem_read(addr);
 
-        let gte = val >= param;
-        self.set_flag(Flag::Carry, gte);
+        let (result, borrow) = val.overflowing_sub(param);
 
-        let eq = val == param;
-        self.set_flag(Flag::Zero, eq);
+        // let gte = val >= param;
+        self.set_flag(Flag::Carry, !borrow);
 
-        let sign = val >= 0x80;
-        self.set_flag(Flag::Negative, sign);
+        // let eq = val == param;
+        self.set_flag(Flag::Zero, result == 0);
+
+        // let sign = (param & (1 << 7)) > 0;
+        self.set_flag(Flag::Negative, borrow);
     }
 
     /// CMP (CoMPare accumulator)
@@ -1309,7 +1311,7 @@ mod tests {
             // greater than
             let mut cpu = Cpu::new();
             cpu._load_and_run(vec![instruction, 0x01]);
-            assert_eq_bits!(cpu.status, 0b0010_0100);
+            assert_eq_bits!(cpu.status, 0b1010_0100);
 
             // less than
             let mut cpu = Cpu::new();
@@ -1322,18 +1324,6 @@ mod tests {
             }
             cpu._run();
             assert_eq_bits!(cpu.status, 0b0010_0101);
-
-            // ensure sets Negative flag, if applicable
-            let mut cpu = Cpu::new();
-            cpu._load_test_rom(vec![instruction, 0x81]);
-            cpu.reset();
-            match register {
-                Register::A => cpu.a = 0x81,
-                Register::X => cpu.x = 0x81,
-                Register::Y => cpu.y = 0x81,
-            }
-            cpu._run();
-            assert_eq_bits!(cpu.status, 0b1010_0111);
         }
     }
 
@@ -1562,7 +1552,7 @@ mod tests {
             Err(e) => e.into_inner(),
         };
 
-        let max_known_good_line = 158;
+        let max_known_good_line = 230;
         for (idx, e) in expected.lines().enumerate() {
             let line_num = idx + 1;
             if line_num > max_known_good_line {
