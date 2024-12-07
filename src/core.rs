@@ -811,7 +811,7 @@ impl Cpu {
         };
 
         let tla = format!("{}", name);
-        let mut addr_block = match mode {
+        let addr_block = match mode {
             AddressingMode::Immediate => format!("#${:02X}", param1),
             AddressingMode::ZeroPage => format!("${:02X} = {:02X}", param1, self.mem_read(op_addr)),
             AddressingMode::ZeroPageX => format!("${:02X},X", param1),
@@ -1091,7 +1091,7 @@ mod tests {
         cpu.a = 0xf0;
         cpu._run();
         assert_eq!(cpu.a, 0xff);
-        assert_eq!(cpu.get_flag(Flag::Negative), true);
+        assert!(cpu.get_flag(Flag::Negative));
     }
 
     #[test]
@@ -1102,7 +1102,7 @@ mod tests {
         cpu.a = 0xf0;
         cpu._run();
         assert_eq!(cpu.a, 0x00);
-        assert_eq!(cpu.get_flag(Flag::Zero), true);
+        assert!(cpu.get_flag(Flag::Zero));
     }
 
     #[test]
