@@ -4,6 +4,9 @@ run:
 lint:
     cargo clippy --all --all-features --tests -- -D warnings
 
+lint_fix:
+    cargo clippy --all --all-features --tests --fix
+
 build:
     cargo build
 
@@ -14,8 +17,6 @@ test_watch:
     git ls-files | entr cargo test
 
 nestest:
-    cargo run roms/nestest.nes
+    NESTEST_HACK=1 cargo run > myout.log
 
 pre_commit: lint test build
-
-

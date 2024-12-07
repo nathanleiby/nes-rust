@@ -47,6 +47,7 @@ pub enum AddressingMode {
     IndirectY,
     None,
     Indirect,
+    Relative,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -186,6 +187,7 @@ impl Cpu {
                 target.wrapping_add(self.y as u16) // indexed
             }
             AddressingMode::None => panic!("mode {:?} is not supported", mode),
+            AddressingMode::Relative => panic!("mode {:?} is not supported", mode),
         }
     }
 
@@ -388,10 +390,8 @@ impl Cpu {
         // displacement is read as a signed integer (2's complement)
         let displacement = self.mem_read(self.pc) as i8;
 
-        self.pc += 1;
-
         if self.get_flag(flag) == is_set {
-            self.pc = (self.pc as isize + displacement as isize) as u16
+            self.pc = (self.pc as isize + 1 + displacement as isize) as u16
         }
     }
 
@@ -802,10 +802,18 @@ impl Cpu {
         //// Address syntax by mode looks like:
 
         let op = lookup_opcode(code);
-        let tla = format!("{}", op.0);
-        let addr_block = match op.2 {
+        let (name, size, mode) = op;
+
+        let op_addr: u16 = if mode != AddressingMode::None && mode != AddressingMode::Relative {
+            self.get_operand_address(&mode)
+        } else {
+            0
+        };
+
+        let tla = format!("{}", name);
+        let mut addr_block = match mode {
             AddressingMode::Immediate => format!("#${:02X}", param1),
-            AddressingMode::ZeroPage => format!("${:02X}", param1),
+            AddressingMode::ZeroPage => format!("${:02X} = {:02X}", param1, self.mem_read(op_addr)),
             AddressingMode::ZeroPageX => format!("${:02X},X", param1),
             AddressingMode::ZeroPageY => format!("${:02X},Y", param1),
             AddressingMode::Absolute => format!("${:02X}{:02X}", param2, param1),
@@ -829,7 +837,12 @@ impl Cpu {
                     param1, val, val_plus_y, data
                 )
             }
-            // AddressingMode::None => todo!(),
+            AddressingMode::Relative => {
+                format!(
+                    "${:04X}",
+                    (self.pc as isize + 2 + (param1 as i8) as isize) as u16
+                )
+            }
             // AddressingMode::Indirect => todo!(),
             _ => "".to_string(),
         };
@@ -838,12 +851,12 @@ impl Cpu {
             "{:04X}  {:02X} {} {} {:>4} {:<28}A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}", //  PPU:{:>3},{:>3} CYC:{:>4}
             self.pc,
             code,
-            if op.1 >= 2 {
+            if size >= 2 {
                 format!("{:02X}", param1)
             } else {
                 "  ".to_string()
             },
-            if op.1 >= 3 {
+            if size >= 3 {
                 format!("{:02X}", param2)
             } else {
                 "  ".to_string()
@@ -865,6 +878,8 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, io::BufRead, sync::Mutex};
+
     use crate::{assert_eq_bits, bus::PRG_ROM_START};
 
     use super::*;
@@ -1501,5 +1516,46 @@ mod tests {
             "0064  11 33     ORA ($33),Y = 0400 @ 0400 = AA  A:00 X:00 Y:00 P:24 SP:FD",
             result[0]
         );
+    }
+
+    #[test]
+    fn test_nestest() {
+        let program = fs::read("roms/nestest.nes").unwrap();
+
+        let mut cpu = Cpu::new();
+        cpu.load_rom(Rom::new(&program));
+        cpu.reset();
+        cpu.pc = 0xC000; // TODO: fix this hacky workaround for nestest
+
+        // execute it until crash, collecting trace data
+        let mutex_cpu = Mutex::new(cpu);
+        let result: Vec<String> = vec![];
+        let mutex_result = Mutex::new(result);
+        let _ = std::panic::catch_unwind(|| {
+            mutex_cpu.lock().unwrap().run_with_callback(|cpu| {
+                mutex_result.lock().unwrap().push(cpu.trace());
+            })
+        });
+
+        let expected = fs::read("nestest_no_cycles.log").unwrap();
+
+        let actual = match mutex_result.lock() {
+            Ok(m) => m,
+            Err(e) => e.into_inner(),
+        };
+
+        let max_known_good_line = 37;
+        for (idx, e) in expected.lines().enumerate() {
+            let line_num = idx + 1;
+            if line_num > max_known_good_line {
+                break;
+            }
+            assert_eq!(
+                actual[idx],
+                e.unwrap().as_str(),
+                "first diff found on line = {:?}",
+                line_num
+            );
+        }
     }
 }

@@ -240,14 +240,15 @@ pub fn lookup_opcode(code: u8) -> Op {
         0xF8 => (OpName::SED, 1, AddressingMode::None),
 
         // Branching instructions
-        0x10 => (OpName::BPL, 1, AddressingMode::None),
-        0x30 => (OpName::BMI, 1, AddressingMode::None),
-        0x50 => (OpName::BVC, 1, AddressingMode::None),
-        0x70 => (OpName::BVS, 1, AddressingMode::None),
-        0x90 => (OpName::BCC, 1, AddressingMode::None),
-        0xB0 => (OpName::BCS, 1, AddressingMode::None),
-        0xD0 => (OpName::BNE, 1, AddressingMode::None),
-        0xF0 => (OpName::BEQ, 1, AddressingMode::None),
+        // NOTE: These use "relative" addressing, where the next byte is read as a 2's complement signed integer
+        0x10 => (OpName::BPL, 2, AddressingMode::Relative),
+        0x30 => (OpName::BMI, 2, AddressingMode::Relative),
+        0x50 => (OpName::BVC, 2, AddressingMode::Relative),
+        0x70 => (OpName::BVS, 2, AddressingMode::Relative),
+        0x90 => (OpName::BCC, 2, AddressingMode::Relative),
+        0xB0 => (OpName::BCS, 2, AddressingMode::Relative),
+        0xD0 => (OpName::BNE, 2, AddressingMode::Relative),
+        0xF0 => (OpName::BEQ, 2, AddressingMode::Relative),
 
         0x00 => (OpName::BRK, 1, AddressingMode::None),
         0x40 => (OpName::RTI, 1, AddressingMode::None),
