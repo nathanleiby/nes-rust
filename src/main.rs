@@ -20,6 +20,8 @@ use sdl2::pixels::PixelFormatEnum;
 use sdl2::EventPump;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::init();
+
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
     let window = video_subsystem

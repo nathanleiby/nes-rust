@@ -204,7 +204,7 @@ pub fn lookup_opcode(code: u8) -> Op {
         0x91 => (OpName::STA, 2, AddressingMode::IndirectY),
 
         0x86 => (OpName::STX, 2, AddressingMode::ZeroPage),
-        0x96 => (OpName::STX, 2, AddressingMode::ZeroPageX),
+        0x96 => (OpName::STX, 2, AddressingMode::ZeroPageY),
         0x8E => (OpName::STX, 3, AddressingMode::Absolute),
 
         0x84 => (OpName::STY, 2, AddressingMode::ZeroPage),

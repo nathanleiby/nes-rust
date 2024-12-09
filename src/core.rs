@@ -172,8 +172,17 @@ impl Cpu {
             AddressingMode::AbsoluteY => self.mem_read_u16(self.pc).wrapping_add(self.y as u16),
             AddressingMode::Indirect => {
                 let base = self.mem_read_u16(self.pc);
-                // indirect
-                self.mem_read_u16(base)
+
+                let is_edge_of_page = base & 0x00ff == 0xff;
+
+                if is_edge_of_page {
+                    let first = self.mem_read(base);
+                    // Intentionally wrap incorrectly, to recreate buggy behavior from original 6502
+                    let second = self.mem_read(base & 0xff00);
+                    ((second as u16) << 8) + first as u16
+                } else {
+                    self.mem_read_u16(base)
+                }
             }
             AddressingMode::IndirectX => {
                 // "Indexed indirect"
@@ -299,18 +308,9 @@ impl Cpu {
                 OpName::BNE => self.bne(),
                 OpName::BEQ => self.beq(),
 
-                OpName::JSR => {
-                    let jump_dest = self.get_operand_address(&mode);
-                    // +2 for consumed u16 destination
-                    // -1 because the spec says so
-                    self.stack_push_u16(self.pc + 2 - 1);
-                    self.pc = jump_dest;
-                }
+                OpName::JSR => self.jsr(&mode),
 
-                OpName::JMP => {
-                    let jump_dest = self.get_operand_address(&mode);
-                    self.pc = jump_dest;
-                }
+                OpName::JMP => self.jmp(mode),
 
                 OpName::BRK => {
                     // self.set_flag(Flag::Break, true);
@@ -327,6 +327,19 @@ impl Cpu {
                 self.pc += size - 1;
             }
         }
+    }
+
+    fn jsr(&mut self, mode: &AddressingMode) {
+        let jump_dest = self.get_operand_address(mode);
+        // +2 for consumed u16 destination
+        // -1 because the spec says so
+        self.stack_push_u16(self.pc + 2 - 1);
+        self.pc = jump_dest;
+    }
+
+    fn jmp(&mut self, mode: AddressingMode) {
+        let jump_dest = self.get_operand_address(&mode);
+        self.pc = jump_dest;
     }
 
     fn rts(&mut self) {
@@ -817,8 +830,16 @@ impl Cpu {
             AddressingMode::ZeroPage => {
                 format!("${:02X} = {:02X}", param1, self.mem_read(param1 as u16))
             }
-            AddressingMode::ZeroPageX => format!("${:02X},X", param1),
-            AddressingMode::ZeroPageY => format!("${:02X},Y", param1),
+            AddressingMode::ZeroPageX => {
+                let offset = param1.wrapping_add(self.x);
+                let data = self.mem_read(offset as u16);
+                format!("${:02X},X @ {:02X} = {:02X}", param1, offset, data)
+            }
+            AddressingMode::ZeroPageY => {
+                let offset = param1.wrapping_add(self.y);
+                let data = self.mem_read(offset as u16);
+                format!("${:02X},Y @ {:02X} = {:02X}", param1, offset, data)
+            }
             AddressingMode::Absolute => {
                 let hi = (param2 as u16) << 8;
                 let addr: u16 = hi + (param1 as u16);
@@ -832,8 +853,22 @@ impl Cpu {
                     ),
                 }
             }
-            AddressingMode::AbsoluteX => format!("${:02X}{:02X},X", param2, param1),
-            AddressingMode::AbsoluteY => format!("${:02X}{:02X},Y", param2, param1),
+            AddressingMode::AbsoluteX => {
+                let addr = addr_from(param1, param2).wrapping_add(self.x as u16);
+                let data = self.mem_read(addr);
+                format!(
+                    "${:02X}{:02X},X @ {:04X} = {:02X}",
+                    param2, param1, addr, data
+                )
+            }
+            AddressingMode::AbsoluteY => {
+                let addr = addr_from(param1, param2).wrapping_add(self.y as u16);
+                let data = self.mem_read(addr);
+                format!(
+                    "${:02X}{:02X},Y @ {:04X} = {:02X}",
+                    param2, param1, addr, data
+                )
+            }
             AddressingMode::IndirectX => {
                 let indexed = param1.wrapping_add(self.x);
                 let indirect = self.mem_read_zero_page_wrapping(indexed);
@@ -861,9 +896,23 @@ impl Cpu {
             }
             AddressingMode::Accumulator => "A".to_string(),
             AddressingMode::Indirect => {
-                let hi = (param2 as u16) << 8;
-                let addr: u16 = hi + (param1 as u16);
-                let indirect = self.mem_read_u16(addr);
+                // Copied from get_operand_address.
+                // TODO: Figure out how to share things better here, given pc is off by 1
+                let indirect = {
+                    let base = self.mem_read_u16(self.pc + 1);
+
+                    let is_edge_of_page = base & 0x00ff == 0xff;
+
+                    if is_edge_of_page {
+                        let first = self.mem_read(base);
+                        // Intentionally wrap incorrectly, to recreate buggy behavior from original 6502
+                        let second = self.mem_read(base & 0xff00);
+                        ((second as u16) << 8) + first as u16
+                    } else {
+                        self.mem_read_u16(base)
+                    }
+                };
+
                 format!("(${:02X}{:02X}) = {:04X}", param2, param1, indirect)
             }
             _ => "".to_string(),
@@ -898,11 +947,15 @@ impl Cpu {
     }
 }
 
+fn addr_from(lo: u8, hi: u8) -> u16 {
+    ((hi as u16) << 8) + lo as u16
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, io::BufRead, sync::Mutex};
 
-    use crate::{assert_eq_bits, bus::PRG_ROM_START};
+    use crate::{assert_eq_bits, assert_eq_hex, bus::PRG_ROM_START};
 
     use super::*;
 
@@ -1072,7 +1125,7 @@ mod tests {
     }
 
     #[test]
-    fn test_jmp() {
+    fn test_jsr() {
         let mut cpu = Cpu::new();
         let jump_dest: u16 = (PRG_ROM_START + CPU_START as u16) + 333;
         let lo = (jump_dest & 0xff) as u8;
@@ -1082,6 +1135,48 @@ mod tests {
         // expect that you jump to jump_dest, then pc steps forward one more time while reading a BRK
         // (since everything is 0x00 BRK by default)
         assert_eq!(cpu.pc, jump_dest + 1);
+    }
+
+    #[test]
+    fn test_jmp_indirect() {
+        let mut cpu = Cpu::new();
+        let jump_dest: u16 = 0;
+        let mem_with_dest = 0x02A4;
+        let lo = (mem_with_dest & 0xff) as u8;
+        let hi = (mem_with_dest >> 8) as u8;
+        let inst = 0x6C;
+        cpu._load_test_rom(vec![inst, lo, hi]);
+        cpu.reset();
+        cpu.mem_write_u16(mem_with_dest, jump_dest);
+        cpu._run();
+
+        // expect that you jump to jump_dest, then pc steps forward one more time while reading a BRK
+        // (since everything is 0x00 BRK by default)
+        assert_eq!(cpu.pc, jump_dest + 1);
+    }
+
+    #[test]
+    /// Check that we handle this behavior edge case:
+    /// "INDIRECT JUMP MUST NEVER USE A VECTOR BEGINNING ON THE LAST BYTE OF A PAGE"
+    /// See also: https://www.reddit.com/r/EmuDev/comments/fi29ah/6502_jump_indirect_error/
+    fn test_jmp_indirect_end_of_page_edge_case() {
+        let mut cpu = Cpu::new();
+
+        let mem_with_dest = 0x03FF;
+        let lo = (mem_with_dest & 0xff) as u8;
+        let hi = (mem_with_dest >> 8) as u8;
+        let inst = 0x6C;
+        cpu._load_test_rom(vec![inst, lo, hi]);
+        cpu.reset();
+        // cpu.mem_write_u16(mem_with_dest, jump_dest);
+        cpu.mem_write(0x0300, 0x40);
+        cpu.mem_write(0x03FF, 0x80);
+        cpu.mem_write(0x0400, 0x50);
+        cpu._run();
+
+        // expect that you jump to jump_dest with the expected buggy wrapping behavior
+        // then cpu.pc steps forward one more time while reading a BRK
+        assert_eq_hex!(cpu.pc, 0x4080 + 1);
     }
 
     #[test]
@@ -1541,8 +1636,7 @@ mod tests {
 
     #[test]
     fn test_nestest() {
-        let max_known_good_line = 3347;
-        // let max_known_good_line = 4000;
+        let max_known_good_line = 5003;
 
         let program = fs::read("roms/nestest.nes").unwrap();
 
@@ -1557,7 +1651,6 @@ mod tests {
         let mutex_result = Mutex::new(result);
         let _ = std::panic::catch_unwind(|| {
             mutex_cpu.lock().unwrap().run_with_callback(|cpu| {
-                // TODO: consider exciting earlier, diffing at each step
                 mutex_result.lock().unwrap().push(cpu.trace());
             })
         });
@@ -1574,13 +1667,18 @@ mod tests {
             if line_num > max_known_good_line {
                 break;
             }
+
+            let expected_line = e.unwrap();
+
+            let current = if actual.len() > idx { &actual[idx] } else { "" };
+
             assert_eq!(
-                actual[idx],
-                e.unwrap().as_str(),
-                "First diff found on line = {:?}. In context the output was: \n\n{}\n{}\n",
+                current,
+                expected_line,
+                "First diff found on line = {:?}. In context the output was: \n\n'''\n{}\n{}\n'''\n",
                 line_num,
                 if idx == 0 { "n/a" } else { &actual[idx - 1] },
-                &actual[idx]
+                current,
             );
         }
     }
