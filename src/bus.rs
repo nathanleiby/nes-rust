@@ -1,4 +1,4 @@
-use crate::{core::Mem, rom::Rom};
+use crate::{core::Mem, ppu::Ppu, rom::Rom};
 
 const RAM: u16 = 0x0000;
 const RAM_MIRROR_END: u16 = 0x2000;
@@ -12,13 +12,15 @@ const PRG_ROM_END: u16 = 0xFFFF;
 pub struct Bus {
     cpu_vram: [u8; 0x800], // 2048
     rom: Rom,
+    ppu: Ppu,
 }
 
 impl Bus {
-    pub fn new(rom: Rom) -> Self {
+    pub fn new(rom: Rom, ppu: Ppu) -> Self {
         Bus {
             cpu_vram: [0; 0x800],
             rom,
+            ppu,
         }
     }
 
@@ -40,6 +42,9 @@ impl Mem for Bus {
             let a = addr & 0b1110_0111_1111_1111;
             self.cpu_vram[a as usize]
         } else if (PPU..PPU_MIRROR_END).contains(&addr) {
+            // The PPU exposes 8 registers. They are mirrored every 8 bytes in this range.
+            let addr = (addr % 8) + 0x2000;
+
             todo!("PPU NYI")
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
             self.read_prg_rom(addr)
@@ -69,7 +74,8 @@ mod tests {
     #[test]
     fn test_read_mirroring() {
         let rom = Rom::new_test_rom(vec![]);
-        let mut bus = Bus::new(rom);
+        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
+        let mut bus = Bus::new(rom, ppu);
         bus.cpu_vram[0] = 123;
 
         assert_eq!(bus.mem_read(0), 123);
@@ -81,7 +87,8 @@ mod tests {
     #[test]
     fn test_write_mirroring() {
         let rom = Rom::new_test_rom(vec![]);
-        let mut bus = Bus::new(rom);
+        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
+        let mut bus = Bus::new(rom, ppu);
 
         bus.mem_write(0, 1);
         assert_eq!(bus.cpu_vram[0], 1);

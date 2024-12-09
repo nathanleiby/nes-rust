@@ -9,7 +9,9 @@ mod bus;
 mod core;
 mod macros;
 mod ops;
+mod ppu;
 mod rom;
+mod utility;
 
 use rand::random;
 use rom::Rom;

@@ -1,7 +1,7 @@
 use crate::core::CPU_START;
 
-#[derive(PartialEq, Eq, Debug)]
-enum Mirroring {
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+pub enum Mirroring {
     FourScreen,
     Vertical,
     Horizontal,
@@ -15,14 +15,12 @@ enum Mapper {
 pub struct Rom {
     pub prg_rom: Vec<u8>,
 
-    #[allow(dead_code)]
-    chr_rom: Vec<u8>,
+    pub chr_rom: Vec<u8>,
 
     #[allow(dead_code)]
     mapper: Mapper,
 
-    #[allow(dead_code)]
-    mirroring: Mirroring,
+    pub mirroring: Mirroring,
 }
 
 const PRG_ROM_PAGE_SIZE: usize = 16384;

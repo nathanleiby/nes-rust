@@ -3,7 +3,9 @@ use std::env;
 use crate::{
     bus::Bus,
     ops::{is_official, lookup_opcode, OpName},
+    ppu::Ppu,
     rom::Rom,
+    utility::addr_from,
 };
 
 /// CPU (Central Processing Unit)
@@ -104,6 +106,7 @@ impl Mem for Cpu {
 impl Cpu {
     pub fn new() -> Self {
         let rom = Rom::new_test_rom(vec![]);
+        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
         Cpu {
             pc: 0,
             sp: DEFAULT_STACK_POINTER,
@@ -111,7 +114,7 @@ impl Cpu {
             x: 0,
             y: 0,
             status: DEFAULT_STATUS,
-            bus: Bus::new(rom),
+            bus: Bus::new(rom, ppu),
         }
     }
 
@@ -205,14 +208,16 @@ impl Cpu {
     //
 
     pub fn load_rom(&mut self, rom: Rom) {
-        self.set_bus(Bus::new(rom));
+        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
+        self.set_bus(Bus::new(rom, ppu));
     }
 
     // Test Helpers
 
     fn _load_test_rom(&mut self, program: Vec<u8>) {
         let rom = Rom::new_test_rom(program);
-        self.set_bus(Bus::new(rom));
+        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
+        self.set_bus(Bus::new(rom, ppu));
     }
 
     fn _load_and_run(&mut self, program: Vec<u8>) {
@@ -995,10 +1000,6 @@ impl Cpu {
     }
 }
 
-fn addr_from(lo: u8, hi: u8) -> u16 {
-    ((hi as u16) << 8) + lo as u16
-}
-
 #[cfg(test)]
 mod tests {
     use std::{fs, io::BufRead, sync::Mutex};
@@ -1623,7 +1624,10 @@ mod tests {
 
     #[test]
     fn test_format_trace() {
-        let mut bus = Bus::new(Rom::new_test_rom(vec![]));
+        let rom = Rom::new_test_rom(vec![]);
+        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
+        let mut bus = Bus::new(rom, ppu);
+
         bus.mem_write(100, 0xa2);
         bus.mem_write(101, 0x01);
         bus.mem_write(102, 0xca);
@@ -1656,7 +1660,9 @@ mod tests {
 
     #[test]
     fn test_format_mem_access() {
-        let mut bus = Bus::new(Rom::new_test_rom(vec![]));
+        let rom = Rom::new_test_rom(vec![]);
+        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
+        let mut bus = Bus::new(rom, ppu);
         // ORA ($33), Y
         bus.mem_write(100, 0x11);
         bus.mem_write(101, 0x33);
