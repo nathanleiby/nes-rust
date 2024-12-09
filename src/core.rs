@@ -171,9 +171,9 @@ impl Cpu {
             AddressingMode::AbsoluteX => self.mem_read_u16(self.pc).wrapping_add(self.x as u16),
             AddressingMode::AbsoluteY => self.mem_read_u16(self.pc).wrapping_add(self.y as u16),
             AddressingMode::Indirect => {
-                let base = self.mem_read(self.pc);
+                let base = self.mem_read_u16(self.pc);
                 // indirect
-                self.mem_read_zero_page_wrapping(base)
+                self.mem_read_u16(base)
             }
             AddressingMode::IndirectX => {
                 // "Indexed indirect"
@@ -823,33 +823,34 @@ impl Cpu {
                 let hi = (param2 as u16) << 8;
                 let addr: u16 = hi + (param1 as u16);
                 match name {
-                    OpName::STX | OpName::LDX | OpName::LDA => format!(
+                    OpName::JMP | OpName::JSR => format!("${:02X}{:02X}", param2, param1,),
+                    _ => format!(
                         "${:02X}{:02X} = {:02X}",
                         param2,
                         param1,
                         self.mem_read(addr)
                     ),
-                    _ => format!("${:02X}{:02X}", param2, param1,),
                 }
             }
             AddressingMode::AbsoluteX => format!("${:02X}{:02X},X", param2, param1),
             AddressingMode::AbsoluteY => format!("${:02X}{:02X},Y", param2, param1),
             AddressingMode::IndirectX => {
-                let added = param1.wrapping_add(self.x);
-                let target = self.mem_read_u16(added as u16);
-                let data = self.mem_read(target);
+                let indexed = param1.wrapping_add(self.x);
+                let indirect = self.mem_read_zero_page_wrapping(indexed);
+                let data = self.mem_read(indirect);
+
                 format!(
                     "(${:02X},X) @ {:02X} = {:04X} = {:02X}",
-                    param1, added, target, data
+                    param1, indexed, indirect, data
                 )
             }
             AddressingMode::IndirectY => {
-                let val = self.mem_read_u16(param1 as u16);
-                let val_plus_y = val.wrapping_add(self.y as u16);
-                let data = self.mem_read(val_plus_y);
+                let indirect = self.mem_read_zero_page_wrapping(param1);
+                let indexed = indirect.wrapping_add(self.y as u16);
+                let data = self.mem_read(indexed);
                 format!(
                     "(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
-                    param1, val, val_plus_y, data
+                    param1, indirect, indexed, data
                 )
             }
             AddressingMode::Relative => {
@@ -858,8 +859,13 @@ impl Cpu {
                     (self.pc as isize + 2 + (param1 as i8) as isize) as u16
                 )
             }
-            AddressingMode::Accumulator => format!("A"),
-            // AddressingMode::Indirect => todo!(),
+            AddressingMode::Accumulator => "A".to_string(),
+            AddressingMode::Indirect => {
+                let hi = (param2 as u16) << 8;
+                let addr: u16 = hi + (param1 as u16);
+                let indirect = self.mem_read_u16(addr);
+                format!("(${:02X}{:02X}) = {:04X}", param2, param1, indirect)
+            }
             _ => "".to_string(),
         };
 
@@ -1535,7 +1541,8 @@ mod tests {
 
     #[test]
     fn test_nestest() {
-        let max_known_good_line = 1061;
+        let max_known_good_line = 3347;
+        // let max_known_good_line = 4000;
 
         let program = fs::read("roms/nestest.nes").unwrap();
 

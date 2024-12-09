@@ -17,6 +17,6 @@ test_watch:
     git ls-files | entr cargo test
 
 nestest:
-    NESTEST_HACK=1 cargo run > myout.log
+    NESTEST_HACK=1 cargo run roms/nestest.nes > myout.log
 
 pre_commit: lint test build
