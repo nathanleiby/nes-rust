@@ -91,7 +91,7 @@ pub fn lookup_opcode(code: u8) -> Op {
         0x21 => (OpName::AND, 2, AddressingMode::IndirectX),
         0x31 => (OpName::AND, 2, AddressingMode::IndirectY),
 
-        0x0A => (OpName::ASL, 2, AddressingMode::None),
+        0x0A => (OpName::ASL, 1, AddressingMode::Accumulator),
         0x06 => (OpName::ASL, 2, AddressingMode::ZeroPage),
         0x16 => (OpName::ASL, 2, AddressingMode::ZeroPageX),
         0x0E => (OpName::ASL, 3, AddressingMode::Absolute),
@@ -157,7 +157,7 @@ pub fn lookup_opcode(code: u8) -> Op {
         0xAC => (OpName::LDY, 3, AddressingMode::Absolute),
         0xBC => (OpName::LDY, 3, AddressingMode::AbsoluteX),
 
-        0x4A => (OpName::LSR, 2, AddressingMode::None),
+        0x4A => (OpName::LSR, 1, AddressingMode::Accumulator),
         0x46 => (OpName::LSR, 2, AddressingMode::ZeroPage),
         0x56 => (OpName::LSR, 2, AddressingMode::ZeroPageX),
         0x4E => (OpName::LSR, 3, AddressingMode::Absolute),
@@ -174,13 +174,13 @@ pub fn lookup_opcode(code: u8) -> Op {
         0x01 => (OpName::ORA, 2, AddressingMode::IndirectX),
         0x11 => (OpName::ORA, 2, AddressingMode::IndirectY),
 
-        0x2A => (OpName::ROL, 2, AddressingMode::None),
+        0x2A => (OpName::ROL, 1, AddressingMode::Accumulator),
         0x26 => (OpName::ROL, 2, AddressingMode::ZeroPage),
         0x36 => (OpName::ROL, 2, AddressingMode::ZeroPageX),
         0x2E => (OpName::ROL, 3, AddressingMode::Absolute),
         0x3E => (OpName::ROL, 3, AddressingMode::AbsoluteX),
 
-        0x6A => (OpName::ROR, 2, AddressingMode::None),
+        0x6A => (OpName::ROR, 1, AddressingMode::Accumulator),
         0x66 => (OpName::ROR, 2, AddressingMode::ZeroPage),
         0x76 => (OpName::ROR, 2, AddressingMode::ZeroPageX),
         0x6E => (OpName::ROR, 3, AddressingMode::Absolute),

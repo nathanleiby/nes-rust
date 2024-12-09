@@ -48,18 +48,19 @@ pub enum AddressingMode {
     None,
     Indirect,
     Relative,
+    Accumulator,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Flag {
-    Negative,
-    Overflow,
-    // Break2,
-    // Break,
-    Decimal,
-    Interrupt,
+    Carry, // 0th bit
     Zero,
-    Carry,
+    Interrupt,
+    Decimal,
+    Break,
+    Break2,
+    Overflow,
+    Negative, // 7th bit
 }
 
 // TODO: restore this later. It's hard-coded to support Snake right now
@@ -186,8 +187,7 @@ impl Cpu {
                 let target = self.mem_read_zero_page_wrapping(base); // indirect
                 target.wrapping_add(self.y as u16) // indexed
             }
-            AddressingMode::None => panic!("mode {:?} is not supported", mode),
-            AddressingMode::Relative => panic!("mode {:?} is not supported", mode),
+            _ => panic!("mode {:?} is not supported", mode),
         }
     }
 
@@ -343,7 +343,12 @@ impl Cpu {
     fn adc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let param = self.mem_read(addr);
-        let (mid, overflow) = self.a.overflowing_add(param);
+
+        self.adc_helper(param);
+    }
+
+    fn adc_helper(&mut self, mem_value: u8) {
+        let (mid, overflow) = self.a.overflowing_add(mem_value);
 
         let c = if self.get_flag(Flag::Carry) { 1 } else { 0 };
         let (result, overflow2) = mid.overflowing_add(c);
@@ -351,7 +356,7 @@ impl Cpu {
         self.set_zero_and_negative_flags(result);
         self.set_flag(Flag::Carry, overflow || overflow2);
 
-        let v = (result ^ self.a) & (result ^ param) & 0x80;
+        let v = (result ^ self.a) & (result ^ mem_value) & 0x80;
         self.set_flag(Flag::Overflow, v > 0);
 
         self.a = result;
@@ -369,8 +374,7 @@ impl Cpu {
 
     /// ASL (Arithmetic Shift Left)
     fn asl(&mut self, mode: &AddressingMode) {
-        // I've overloaded the addressing mode idea to handle accumlator variant
-        if mode == &AddressingMode::None {
+        if mode == &AddressingMode::Accumulator {
             let old_val = self.a;
             let new_val = self.a << 1;
 
@@ -452,14 +456,9 @@ impl Cpu {
 
         let (result, borrow) = val.overflowing_sub(param);
 
-        // let gte = val >= param;
         self.set_flag(Flag::Carry, !borrow);
 
-        // let eq = val == param;
-        self.set_flag(Flag::Zero, result == 0);
-
-        // let sign = (param & (1 << 7)) > 0;
-        self.set_flag(Flag::Negative, borrow);
+        self.set_zero_and_negative_flags(result);
     }
 
     /// CMP (CoMPare accumulator)
@@ -567,7 +566,7 @@ impl Cpu {
         let param = self.mem_read(addr);
 
         self.x = param;
-        self.set_zero_and_negative_flags(self.a);
+        self.set_zero_and_negative_flags(self.x);
     }
 
     /// LDY (LoaD Y register)
@@ -576,13 +575,12 @@ impl Cpu {
         let param = self.mem_read(addr);
 
         self.y = param;
-        self.set_zero_and_negative_flags(self.a);
+        self.set_zero_and_negative_flags(self.y);
     }
 
     /// LSR (Logical Shift Right)
     fn lsr(&mut self, mode: &AddressingMode) {
-        // I've overloaded the addressing mode idea to handle accumlator variant
-        if mode == &AddressingMode::None {
+        if mode == &AddressingMode::Accumulator {
             let old_val = self.a;
             let new_val = self.a >> 1;
 
@@ -617,8 +615,7 @@ impl Cpu {
 
     /// ROL (ROtate Left)
     fn rol(&mut self, mode: &AddressingMode) {
-        // I've overloaded the addressing mode idea to handle accumlator variant
-        if mode == &AddressingMode::None {
+        if mode == &AddressingMode::Accumulator {
             let old_val = self.a;
             let new_val = (self.a << 1) + self.get_flag(Flag::Carry) as u8;
 
@@ -640,8 +637,7 @@ impl Cpu {
 
     /// ROR (ROtate Right)
     fn ror(&mut self, mode: &AddressingMode) {
-        // I've overloaded the addressing mode idea to handle accumlator variant
-        if mode == &AddressingMode::None {
+        if mode == &AddressingMode::Accumulator {
             let old_val = self.a;
             let mut new_val = self.a >> 1;
             if self.get_flag(Flag::Carry) {
@@ -671,22 +667,16 @@ impl Cpu {
     fn rti(&mut self) {
         self.status = self.stack_pop();
         self.pc = self.stack_pop_u16();
-        // self.set_flag(Flag::Break, false);
-        // self.set_flag(Flag::Break2, true);
+        self.set_flag(Flag::Break, false);
+        self.set_flag(Flag::Break2, true);
     }
 
     /// SBC (SuBtract with Carry)
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let param = self.mem_read(addr);
-        let (new_val, overflow) = self.a.overflowing_sub(param);
-        self.a = new_val;
 
-        self.set_zero_and_negative_flags(new_val);
-        if overflow {
-            self.set_flag(Flag::Carry, false);
-        }
-        self.set_flag(Flag::Overflow, false); // TODO: not implemented -- fix it for snake to work?
+        self.adc_helper(255 - param);
     }
 
     /// STA (STore Accumulator)
@@ -715,7 +705,6 @@ impl Cpu {
     /// TXS (Transfer X to Stack ptr)
     fn txs(&mut self) {
         self.sp = self.x;
-        self.set_zero_and_negative_flags(self.sp);
     }
 
     /// TSX (Transfer Stack ptr to X)
@@ -777,8 +766,8 @@ impl Cpu {
             Flag::Zero => 1,
             Flag::Interrupt => 2,
             Flag::Decimal => 3,
-            // Flag::Break => 4,
-            // Flag::Break2 => 5,
+            Flag::Break => 4,
+            Flag::Break2 => 5,
             Flag::Overflow => 6,
             Flag::Negative => 7,
         };
@@ -799,8 +788,8 @@ impl Cpu {
             Flag::Zero => 1,
             Flag::Interrupt => 2,
             Flag::Decimal => 3,
-            // Flag::Break => 4,
-            // Flag::Break2 => 5,
+            Flag::Break => 4,
+            Flag::Break2 => 5,
             Flag::Overflow => 6,
             Flag::Negative => 7,
         };
@@ -830,7 +819,19 @@ impl Cpu {
             }
             AddressingMode::ZeroPageX => format!("${:02X},X", param1),
             AddressingMode::ZeroPageY => format!("${:02X},Y", param1),
-            AddressingMode::Absolute => format!("${:02X}{:02X}", param2, param1),
+            AddressingMode::Absolute => {
+                let hi = (param2 as u16) << 8;
+                let addr: u16 = hi + (param1 as u16);
+                match name {
+                    OpName::STX | OpName::LDX | OpName::LDA => format!(
+                        "${:02X}{:02X} = {:02X}",
+                        param2,
+                        param1,
+                        self.mem_read(addr)
+                    ),
+                    _ => format!("${:02X}{:02X}", param2, param1,),
+                }
+            }
             AddressingMode::AbsoluteX => format!("${:02X}{:02X},X", param2, param1),
             AddressingMode::AbsoluteY => format!("${:02X}{:02X},Y", param2, param1),
             AddressingMode::IndirectX => {
@@ -857,6 +858,7 @@ impl Cpu {
                     (self.pc as isize + 2 + (param1 as i8) as isize) as u16
                 )
             }
+            AddressingMode::Accumulator => format!("A"),
             // AddressingMode::Indirect => todo!(),
             _ => "".to_string(),
         };
@@ -1533,7 +1535,7 @@ mod tests {
 
     #[test]
     fn test_nestest() {
-        let max_known_good_line = 313;
+        let max_known_good_line = 1061;
 
         let program = fs::read("roms/nestest.nes").unwrap();
 
@@ -1568,8 +1570,10 @@ mod tests {
             assert_eq!(
                 actual[idx],
                 e.unwrap().as_str(),
-                "first diff found on line = {:?}",
-                line_num
+                "First diff found on line = {:?}. In context the output was: \n\n{}\n{}\n",
+                line_num,
+                if idx == 0 { "n/a" } else { &actual[idx - 1] },
+                &actual[idx]
             );
         }
     }
