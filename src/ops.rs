@@ -61,6 +61,14 @@ pub enum OpName {
     TXA,
     TXS,
     TYA,
+    LAX,
+    SAX,
+    DCP,
+    ISB,
+    SLO,
+    SRE,
+    RLA,
+    RRA,
 }
 
 impl fmt::Display for OpName {
@@ -136,6 +144,13 @@ pub fn lookup_opcode(code: u8) -> Op {
         0xEE => (OpName::INC, 3, AddressingMode::Absolute),
         0xFE => (OpName::INC, 3, AddressingMode::AbsoluteX),
 
+        0xA7 => (OpName::LAX, 2, AddressingMode::ZeroPage),
+        0xB7 => (OpName::LAX, 2, AddressingMode::ZeroPageY),
+        0xAF => (OpName::LAX, 3, AddressingMode::Absolute),
+        0xBF => (OpName::LAX, 3, AddressingMode::AbsoluteY),
+        0xA3 => (OpName::LAX, 2, AddressingMode::IndirectX),
+        0xB3 => (OpName::LAX, 2, AddressingMode::IndirectY),
+
         0xA9 => (OpName::LDA, 2, AddressingMode::Immediate),
         0xA5 => (OpName::LDA, 2, AddressingMode::ZeroPage),
         0xB5 => (OpName::LDA, 2, AddressingMode::ZeroPageX),
@@ -163,7 +178,12 @@ pub fn lookup_opcode(code: u8) -> Op {
         0x4E => (OpName::LSR, 3, AddressingMode::Absolute),
         0x5E => (OpName::LSR, 3, AddressingMode::AbsoluteX),
 
-        0xEA => (OpName::NOP, 1, AddressingMode::None),
+        0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xEA | 0xFA => (OpName::NOP, 1, AddressingMode::None),
+        0x04 | 0x44 | 0x64 => (OpName::NOP, 2, AddressingMode::ZeroPage),
+        0x14 | 0x34 | 0x54 | 0x74 | 0xD4 | 0xF4 => (OpName::NOP, 2, AddressingMode::ZeroPageX),
+        0x80 | 0x82 | 0x89 | 0xC2 | 0xE2 => (OpName::NOP, 2, AddressingMode::Immediate),
+        0x0C => (OpName::NOP, 3, AddressingMode::Absolute),
+        0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => (OpName::NOP, 3, AddressingMode::AbsoluteX),
 
         0x09 => (OpName::ORA, 2, AddressingMode::Immediate),
         0x05 => (OpName::ORA, 2, AddressingMode::ZeroPage),
@@ -187,6 +207,7 @@ pub fn lookup_opcode(code: u8) -> Op {
         0x7E => (OpName::ROR, 3, AddressingMode::AbsoluteX),
 
         0xE9 => (OpName::SBC, 2, AddressingMode::Immediate),
+        0xEB => (OpName::SBC, 2, AddressingMode::Immediate),
         0xE5 => (OpName::SBC, 2, AddressingMode::ZeroPage),
         0xF5 => (OpName::SBC, 2, AddressingMode::ZeroPageX),
         0xED => (OpName::SBC, 3, AddressingMode::Absolute),
@@ -257,6 +278,76 @@ pub fn lookup_opcode(code: u8) -> Op {
         0x4C => (OpName::JMP, 3, AddressingMode::Absolute),
         0x6C => (OpName::JMP, 3, AddressingMode::Indirect),
 
+        0x87 => (OpName::SAX, 2, AddressingMode::ZeroPage),
+        0x97 => (OpName::SAX, 2, AddressingMode::ZeroPageY),
+        0x83 => (OpName::SAX, 2, AddressingMode::IndirectX),
+        0x8F => (OpName::SAX, 3, AddressingMode::Absolute),
+
+        0xC7 => (OpName::DCP, 2, AddressingMode::ZeroPage),
+        0xD7 => (OpName::DCP, 2, AddressingMode::ZeroPageX),
+        0xCF => (OpName::DCP, 3, AddressingMode::Absolute),
+        0xDF => (OpName::DCP, 3, AddressingMode::AbsoluteX),
+        0xDB => (OpName::DCP, 3, AddressingMode::AbsoluteY),
+        0xC3 => (OpName::DCP, 2, AddressingMode::IndirectX),
+        0xD3 => (OpName::DCP, 2, AddressingMode::IndirectY),
+
+        0xE7 => (OpName::ISB, 2, AddressingMode::ZeroPage),
+        0xF7 => (OpName::ISB, 2, AddressingMode::ZeroPageX),
+        0xEF => (OpName::ISB, 3, AddressingMode::Absolute),
+        0xFF => (OpName::ISB, 3, AddressingMode::AbsoluteX),
+        0xFB => (OpName::ISB, 3, AddressingMode::AbsoluteY),
+        0xE3 => (OpName::ISB, 2, AddressingMode::IndirectX),
+        0xF3 => (OpName::ISB, 2, AddressingMode::IndirectY),
+
+        0x27 => (OpName::RLA, 2, AddressingMode::ZeroPage),
+        0x37 => (OpName::RLA, 2, AddressingMode::ZeroPageX),
+        0x2F => (OpName::RLA, 3, AddressingMode::Absolute),
+        0x3F => (OpName::RLA, 3, AddressingMode::AbsoluteX),
+        0x3B => (OpName::RLA, 3, AddressingMode::AbsoluteY),
+        0x23 => (OpName::RLA, 2, AddressingMode::IndirectX),
+        0x33 => (OpName::RLA, 2, AddressingMode::IndirectY),
+
+        0x67 => (OpName::RRA, 2, AddressingMode::ZeroPage),
+        0x77 => (OpName::RRA, 2, AddressingMode::ZeroPageX),
+        0x6F => (OpName::RRA, 3, AddressingMode::Absolute),
+        0x7F => (OpName::RRA, 3, AddressingMode::AbsoluteX),
+        0x7B => (OpName::RRA, 3, AddressingMode::AbsoluteY),
+        0x63 => (OpName::RRA, 2, AddressingMode::IndirectX),
+        0x73 => (OpName::RRA, 2, AddressingMode::IndirectY),
+
+        0x07 => (OpName::SLO, 2, AddressingMode::ZeroPage),
+        0x17 => (OpName::SLO, 2, AddressingMode::ZeroPageX),
+        0x0F => (OpName::SLO, 3, AddressingMode::Absolute),
+        0x1F => (OpName::SLO, 3, AddressingMode::AbsoluteX),
+        0x1B => (OpName::SLO, 3, AddressingMode::AbsoluteY),
+        0x03 => (OpName::SLO, 2, AddressingMode::IndirectX),
+        0x13 => (OpName::SLO, 2, AddressingMode::IndirectY),
+
+        0x47 => (OpName::SRE, 2, AddressingMode::ZeroPage),
+        0x57 => (OpName::SRE, 2, AddressingMode::ZeroPageX),
+        0x4F => (OpName::SRE, 3, AddressingMode::Absolute),
+        0x5F => (OpName::SRE, 3, AddressingMode::AbsoluteX),
+        0x5B => (OpName::SRE, 3, AddressingMode::AbsoluteY),
+        0x43 => (OpName::SRE, 2, AddressingMode::IndirectX),
+        0x53 => (OpName::SRE, 2, AddressingMode::IndirectY),
+
         _ => todo!("unsupported opcode = {:02x}", code),
+    }
+}
+
+pub fn is_official(code: u8) -> bool {
+    let (name, _, _) = lookup_opcode(code);
+    match name {
+        OpName::DCP
+        | OpName::ISB
+        | OpName::RLA
+        | OpName::RRA
+        | OpName::SAX
+        | OpName::SLO
+        | OpName::SRE
+        | OpName::LAX => false,
+        OpName::NOP => code == 0xEA,
+        OpName::SBC => ![0xEB].contains(&code),
+        _ => true,
     }
 }

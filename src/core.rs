@@ -2,7 +2,7 @@ use std::env;
 
 use crate::{
     bus::Bus,
-    ops::{lookup_opcode, OpName},
+    ops::{is_official, lookup_opcode, OpName},
     rom::Rom,
 };
 
@@ -259,9 +259,15 @@ impl Cpu {
                 OpName::CMP => self.cmp(&mode),
                 OpName::CPX => self.cpx(&mode),
                 OpName::CPY => self.cpy(&mode),
+                OpName::DCP => self.dcp(&mode),
                 OpName::DEC => self.dec(&mode),
                 OpName::EOR => self.eor(&mode),
                 OpName::INC => self.inc(&mode),
+                OpName::ISB => self.isb(&mode),
+                OpName::LAX => {
+                    self.lda(&mode);
+                    self.tax();
+                }
                 OpName::LDA => self.lda(&mode),
                 OpName::LDX => self.ldx(&mode),
                 OpName::LDY => self.ldy(&mode),
@@ -270,7 +276,9 @@ impl Cpu {
                 OpName::ORA => self.ora(&mode),
                 OpName::ROL => self.rol(&mode),
                 OpName::ROR => self.ror(&mode),
+                OpName::SAX => self.sax(&mode),
                 OpName::SBC => self.sbc(&mode),
+                OpName::SLO => self.slo(&mode),
                 OpName::STA => self.sta(&mode),
                 OpName::STX => self.stx(&mode),
                 OpName::STY => self.sty(&mode),
@@ -320,6 +328,9 @@ impl Cpu {
                 OpName::RTI => self.rti(),
 
                 OpName::RTS => self.rts(),
+                OpName::SRE => self.sre(&mode),
+                OpName::RLA => self.rla(&mode),
+                OpName::RRA => self.rra(&mode),
             }
 
             // some operations modify the pc, like JMP. We shouldn't override that.
@@ -824,7 +835,7 @@ impl Cpu {
         let op = lookup_opcode(code);
         let (name, size, mode) = op;
 
-        let tla = format!("{}", name);
+        let tla = format!("{}{}", if is_official(code) { "" } else { "*" }, name);
         let addr_block = match mode {
             AddressingMode::Immediate => format!("#${:02X}", param1),
             AddressingMode::ZeroPage => {
@@ -944,6 +955,43 @@ impl Cpu {
             // 0
         )
         .to_string()
+    }
+
+    fn sax(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let val = self.x & self.a;
+
+        self.mem_write(addr, val);
+    }
+
+    fn dcp(&mut self, mode: &AddressingMode) {
+        self.dec(mode);
+        self.cmp(mode);
+    }
+
+    fn isb(&mut self, mode: &AddressingMode) {
+        self.inc(mode);
+        self.sbc(mode);
+    }
+
+    fn rla(&mut self, mode: &AddressingMode) {
+        self.rol(mode);
+        self.and(mode);
+    }
+
+    fn rra(&mut self, mode: &AddressingMode) {
+        self.ror(mode);
+        self.adc(mode);
+    }
+
+    fn slo(&mut self, mode: &AddressingMode) {
+        self.asl(mode);
+        self.ora(mode);
+    }
+
+    fn sre(&mut self, mode: &AddressingMode) {
+        self.lsr(mode);
+        self.eor(mode);
     }
 }
 
@@ -1636,7 +1684,8 @@ mod tests {
 
     #[test]
     fn test_nestest() {
-        let max_known_good_line = 5003;
+        let max_known_good_line = 8980;
+        // let max_known_good_line = 8981;
 
         let program = fs::read("roms/nestest.nes").unwrap();
 

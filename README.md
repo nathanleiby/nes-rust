@@ -8,7 +8,9 @@ Priorities:
 - Try Bevy game engine for Frontend (audio, input, screen)
 - Unit tested
 - CI on commit: linting, unit tests, releases
-- Try some Rust patterns for midsized projects... break up the repo into modules?
+- Try some Rust patterns for midsized projects...
+  - break up the repo into modules?
+  - run benchmarks?
 
 
 ## References
