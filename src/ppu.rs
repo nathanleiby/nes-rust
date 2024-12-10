@@ -16,16 +16,15 @@ pub struct PpuRegisters {
     // Status (0x2002) - reports PPU status
     status: StatusRegister,
 
-    // Object Attribute Memory - the space responsible for sprites
+    /// Address in Object Attribute Memory - the space responsible for sprites
+    // TODO: OAMADDR is set to 0 during each of ticks 257–320 (the sprite tile loading interval) of the pre-render and visible scanlines. This also means that at the end of a normal complete rendered frame, OAMADDR will always have returned to 0.
     oam_address: u8,
 
-    // Scroll (0x2005) - instructs PPU how to set a viewport
+    /// Scroll (0x2005) - instructs PPU how to set a viewport
     scroll: PpuScrollRegister,
 
-    /// Address (0x2006) - provides access to memory map available for PPU
-    /// Data (0x2007) - provides access to the memory map available for PPU
+    /// Address (0x2006) and Data (0x2007) - provides access to memory map available for PPU
     address: AddrRegister,
-    // oam_dma: u8,
 }
 
 pub struct Ppu {
@@ -65,10 +64,6 @@ impl Ppu {
         self.nmi_interrupt
     }
 
-    pub fn write_to_addr(&mut self, data: u8) {
-        self.registers.address.external_write(data);
-    }
-
     pub fn write_to_ctrl(&mut self, data: u8) {
         // TODO: bugzmanov book sets ctrl.bits directly vs recreating .. I hit an error attempting that
         self.registers.control = ControlRegister::from_bits_truncate(data);
@@ -91,6 +86,10 @@ impl Ppu {
         self.registers
             .address
             .increment(self.registers.control.vram_increment_amount());
+    }
+
+    pub fn write_to_addr(&mut self, data: u8) {
+        self.registers.address.external_write(data);
     }
 
     pub fn read_from_data(&mut self) -> u8 {
@@ -174,7 +173,12 @@ impl Ppu {
         self.registers.oam_address = data;
     }
 
-    pub fn read_from_status(&self) -> u8 {
+    pub fn read_from_status(&mut self) -> u8 {
+        // Reading this register has the side effect of clearing the PPU's internal w register.
+        // It is commonly read before writes to PPUSCROLL and PPUADDR to ensure the writes occur in the correct order.
+        self.registers.address.is_lo_byte = false;
+        self.registers.scroll.is_y_scroll = false;
+
         self.registers.status.bits()
     }
 }
@@ -197,8 +201,13 @@ bitflags! {
     /// +--------- Vblank NMI enable (0: off, 1: on)
     #[derive(Default)]
     pub struct ControlRegister: u8 {
-        const NAMETABLE_1 = 1 << 0;
-        const NAMETABLE_2 = 1 << 1;
+        const NAMETABLE = 0b11;
+        // Current nametable bits in PPUCTRL bits 0 and 1 can equivalently be considered the most significant bit of the scroll coordinates, which are 9 bits wide
+        /// X scroll position bit 8 (i.e. add 256 to X)
+        const X_SCROLL = 1 << 0;
+        /// Y scroll position bit 8 (i.e. add 240 to Y)
+        const Y_SCROLL = 1 << 1;
+
         const VRAM_INCREMENT = 1 << 2;
         const SPRITE_PATTERN_ADDR = 1 << 3;
         const BACKGROUND_PATTERN_ADDR = 1 << 4;
