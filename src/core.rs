@@ -2,7 +2,7 @@ use std::env;
 
 use crate::{
     bus::Bus,
-    ops::{is_official, lookup_opcode, OpName},
+    ops::{addressing_mode_to_size, is_official, lookup_opcode, OpName},
     rom::Rom,
     utility::addr_from,
 };
@@ -250,7 +250,8 @@ impl Cpu {
             let opcode = self.mem_read(self.pc);
             self.pc += 1;
 
-            let (name, size, mode) = lookup_opcode(opcode);
+            let (name, mode) = lookup_opcode(opcode);
+            let size = addressing_mode_to_size(&mode);
 
             let saved_pc = self.pc;
             match name {
@@ -835,7 +836,8 @@ impl Cpu {
         //// Address syntax by mode looks like:
 
         let op = lookup_opcode(code);
-        let (name, size, mode) = op;
+        let (name, mode) = op;
+        let size = addressing_mode_to_size(&mode);
 
         let tla = format!("{}{}", if is_official(code) { "" } else { "*" }, name);
         let addr_block = match mode {
