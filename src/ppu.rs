@@ -11,17 +11,17 @@ pub struct PpuRegisters {
     control: ControlRegister,
 
     // Mask (0x2001) - instructs PPU how to render sprites and background
-    // mask: u8,
+    mask: MaskRegister,
 
     // Status (0x2002) - reports PPU status
-    // status: u8,
+    status: StatusRegister,
 
     // Object Attribute Memory - the space responsible for sprites
-    // oam_address: u8,
-    // oam_data: u8,
+    oam_address: u8,
 
     // Scroll (0x2005) - instructs PPU how to set a viewport
-    // scroll: u8,
+    scroll: PpuScrollRegister,
+
     /// Address (0x2006) - provides access to memory map available for PPU
     /// Data (0x2007) - provides access to the memory map available for PPU
     address: AddrRegister,
@@ -34,7 +34,6 @@ pub struct Ppu {
     /// VRAM (also called "name tables")
     vram: [u8; 2048],
     palettes: [u8; 32],
-    #[allow(dead_code)]
     oam_data: [u8; 256],
 
     mirroring: Mirroring,
@@ -75,13 +74,26 @@ impl Ppu {
         self.registers.control = ControlRegister::from_bits_truncate(data);
     }
 
+    pub fn write_to_mask(&mut self, data: u8) {
+        self.registers.mask = MaskRegister::from_bits_truncate(data);
+    }
+
+    pub fn write_to_scroll_register(&mut self, data: u8) {
+        if self.registers.scroll.is_y_scroll {
+            self.registers.scroll.y_scroll = data;
+        } else {
+            self.registers.scroll.x_scroll = data;
+        }
+        self.registers.scroll.is_y_scroll = !self.registers.scroll.is_y_scroll;
+    }
+
     fn increment_vram_addr(&mut self) {
         self.registers
             .address
             .increment(self.registers.control.vram_increment_amount());
     }
 
-    pub fn read_data(&mut self) -> u8 {
+    pub fn read_from_data(&mut self) -> u8 {
         let addr = self.registers.address.get();
         self.increment_vram_addr();
 
@@ -94,14 +106,14 @@ impl Ppu {
 
                 // and ROM-configured mirroring
                 let mirrored = match (self.mirroring, name_table_idx) {
-                    (Mirroring::Horizontal, 1) => base - 0x0400,
-                    (Mirroring::Horizontal, 3) => base - 0x0C00,
-                    (Mirroring::Vertical, 2) => base - 0x0800,
-                    (Mirroring::Vertical, 3) => base - 0x0C00,
+                    (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 2) => base - 0x0400,
+                    (Mirroring::Vertical, 2)
+                    | (Mirroring::Vertical, 3)
+                    | (Mirroring::Horizontal, 3) => base - 0x0800,
+                    (Mirroring::Horizontal, _) | (Mirroring::Vertical, _) => base,
                     (Mirroring::FourScreen, _) => {
-                        todo!("NYI. More info: https://www.nesdev.org/wiki/Mirroring#4-Screen")
+                        todo!("Four Screen requires specicial setup with more RAM. More info: https://www.nesdev.org/wiki/Mirroring#4-Screen")
                     }
-                    _ => base,
                 };
                 self.vram[mirrored as usize]
             }
@@ -148,24 +160,41 @@ impl Ppu {
             0x4000..=0xFFFF => todo!("read_data doesn't yet handle the mirrors range"),
         }
     }
+
+    pub fn write_to_oam_data(&mut self, data: u8) {
+        self.oam_data[self.registers.oam_address as usize] = data;
+        self.registers.oam_address += 1;
+    }
+
+    pub fn read_from_oam_data(&mut self) -> u8 {
+        self.oam_data[self.registers.oam_address as usize]
+    }
+
+    pub fn write_to_oam_address(&mut self, data: u8) {
+        self.registers.oam_address = data;
+    }
+
+    pub fn read_from_status(&self) -> u8 {
+        self.registers.status.bits()
+    }
 }
 
 bitflags! {
-    // 7  bit  0
-    // ---- ----
-    // VPHB SINN
-    // |||| ||||
-    // |||| ||++- Base nametable address
-    // |||| ||    (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
-    // |||| |+--- VRAM address increment per CPU read/write of PPUDATA
-    // |||| |     (0: add 1, going across; 1: add 32, going down)
-    // |||| +---- Sprite pattern table address for 8x8 sprites
-    // ||||       (0: $0000; 1: $1000; ignored in 8x16 mode)
-    // |||+------ Background pattern table address (0: $0000; 1: $1000)
-    // ||+------- Sprite size (0: 8x8 pixels; 1: 8x16 pixels – see PPU OAM#Byte 1)
-    // |+-------- PPU master/slave select
-    // |          (0: read backdrop from EXT pins; 1: output color on EXT pins)
-    // +--------- Vblank NMI enable (0: off, 1: on)
+    /// 7  bit  0
+    /// ---- ----
+    /// VPHB SINN
+    /// |||| ||||
+    /// |||| ||++- Base nametable address
+    /// |||| ||    (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
+    /// |||| |+--- VRAM address increment per CPU read/write of PPUDATA
+    /// |||| |     (0: add 1, going across; 1: add 32, going down)
+    /// |||| +---- Sprite pattern table address for 8x8 sprites
+    /// ||||       (0: $0000; 1: $1000; ignored in 8x16 mode)
+    /// |||+------ Background pattern table address (0: $0000; 1: $1000)
+    /// ||+------- Sprite size (0: 8x8 pixels; 1: 8x16 pixels – see PPU OAM#Byte 1)
+    /// |+-------- PPU master/slave select
+    /// |          (0: read backdrop from EXT pins; 1: output color on EXT pins)
+    /// +--------- Vblank NMI enable (0: off, 1: on)
     #[derive(Default)]
     pub struct ControlRegister: u8 {
         const NAMETABLE_1 = 1 << 0;
@@ -176,6 +205,50 @@ bitflags! {
         const SPRITE_SIZE = 1 << 5;
         const MASTER_SLAVE_SELECT = 1 << 6;
         const VBLANK_NMI_ENABLE = 1 << 7;
+    }
+}
+
+bitflags! {
+    // 7  bit  0
+    // ---- ----
+    // VSOx xxxx
+    // |||| ||||
+    // |||+-++++- (PPU open bus or 2C05 PPU identifier)
+    // ||+------- Sprite overflow flag
+    // |+-------- Sprite 0 hit flag
+    // +--------- Vblank flag, cleared on read. Unreliable; see below.
+    #[derive(Default)]
+    pub struct StatusRegister: u8 {
+        const OPEN_BUS = 0b0001_1111;
+        const SPRITE_OVERFLOW_FLAG = 1 << 5;
+        const SPRITE_0_HIT_FLAG = 1 << 6;
+        const VBLANK_FLAG = 1 << 7;
+    }
+}
+
+bitflags! {
+    /// 7  bit  0
+    /// ---- ----
+    /// BGRs bMmG
+    /// |||| ||||
+    /// |||| |||+- Greyscale (0: normal color, 1: greyscale)
+    /// |||| ||+-- 1: Show background in leftmost 8 pixels of screen, 0: Hide
+    /// |||| |+--- 1: Show sprites in leftmost 8 pixels of screen, 0: Hide
+    /// |||| +---- 1: Enable background rendering
+    /// |||+------ 1: Enable sprite rendering
+    /// ||+------- Emphasize red (green on PAL/Dendy)
+    /// |+-------- Emphasize green (red on PAL/Dendy)
+    /// +--------- Emphasize blue
+    #[derive(Default)]
+    pub struct MaskRegister: u8 {
+        const GREYSCALE = 1 << 0;
+        const SHOW_BACKGROUND = 1 << 1;
+        const SHOW_SPRITES = 1 << 2;
+        const ENABLE_BACKGROUND_RENDERING = 1 << 3;
+        const ENABLE_SPRITE_RENDERING = 1 << 4;
+        const EMPHASIZE_RED = 1 << 5;
+        const EMPHASIZE_GREEN = 1 << 6;
+        const EMPHASIZE_BLUE = 1 << 7;
     }
 }
 
@@ -190,11 +263,20 @@ impl ControlRegister {
 }
 
 #[derive(Default)]
+struct PpuScrollRegister {
+    x_scroll: u8,
+    y_scroll: u8,
+
+    // TODO: Actually controlled by w_register, which is shared with AddrRegister
+    is_y_scroll: bool,
+}
+
+#[derive(Default)]
 struct AddrRegister {
     hi: u8,
     lo: u8,
 
-    // This represents the `w` register, where false means w=0
+    // TODO: Actually controlled by w_register, which is shared with PpuScrollRegister
     is_lo_byte: bool,
 }
 

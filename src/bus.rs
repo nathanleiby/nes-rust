@@ -51,9 +51,9 @@ impl Mem for Bus {
                     "attempt to read from write-only PPU register: 0x200{}",
                     register_idx
                 ),
-                2 => todo!("NYI: read PPU Status"),
-                4 => todo!("NYI: read OAM data (sprite data)"),
-                7 => self.ppu.read_data(),
+                2 => self.ppu.read_from_status(),
+                4 => self.ppu.read_from_oam_data(),
+                7 => self.ppu.read_from_data(),
                 8..=u16::MAX => panic!("invalid PPU register IDX: {}", register_idx),
             }
         } else if addr == 0x4016 {
@@ -75,11 +75,11 @@ impl Mem for Bus {
             let register_idx = addr % 8;
             match register_idx {
                 0 => self.ppu.write_to_ctrl(data),
-                1 => todo!("write to PPU Mask"),
+                1 => self.ppu.write_to_mask(data),
                 2 => panic!("attempt to write to read-only PPU register: 0x2002 (Status)",),
-                3 => todo!("write to OAM Addr"),
-                4 => todo!("write to OAM Data"),
-                5 => todo!("write to PPU Scroll"),
+                3 => self.ppu.write_to_oam_address(data),
+                4 => self.ppu.write_to_oam_data(data),
+                5 => self.ppu.write_to_scroll_register(data),
                 6 => self.ppu.write_to_addr(data),
                 7 => self.ppu.write_to_data(data),
                 8..=u16::MAX => panic!("invalid PPU register IDX: {}", register_idx),
