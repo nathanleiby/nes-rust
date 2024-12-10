@@ -245,12 +245,24 @@ impl Cpu {
         F: FnMut(&mut Cpu),
     {
         loop {
+            if self.bus.poll_nmi_status() {
+                todo!("implement NMI interrupt");
+                // self.interrupt_nmi();
+            }
+
             callback(self);
 
             let opcode = self.mem_read(self.pc);
             self.pc += 1;
 
-            let (name, mode) = lookup_opcode(opcode);
+            let (name, cycles, mode) = lookup_opcode(opcode);
+            if cycles.0 == 0 {
+                todo!(
+                    "cycles is mistakenly set to 0 for {} (0x{:02X}) ",
+                    name,
+                    opcode
+                );
+            }
             let size = addressing_mode_to_size(&mode);
 
             let saved_pc = self.pc;
@@ -335,6 +347,13 @@ impl Cpu {
                 OpName::RLA => self.rla(&mode),
                 OpName::RRA => self.rra(&mode),
             }
+
+            // TODO: Handle extra cycles behavior
+            // (1) page wrapping behavior for some ops that adds +1 to the number of cycles
+            //      Memory page size is 256 bytes. For example, the range [0x0000 .. 0x00FF]- belongs to page 0, [0x0100 .. 0x01FF] belongs to page 1, etc.
+            //     It's enough to compare the upper byte of the addresses to see if they are on the same page.
+            // (2) branching behavior that adds +1 or +2 to cycles
+            self.bus.tick(cycles.0 as usize);
 
             // some operations modify the pc, like JMP. We shouldn't override that.
             if self.pc == saved_pc {
@@ -836,7 +855,7 @@ impl Cpu {
         //// Address syntax by mode looks like:
 
         let op = lookup_opcode(code);
-        let (name, mode) = op;
+        let (name, _, mode) = op;
         let size = addressing_mode_to_size(&mode);
 
         let tla = format!("{}{}", if is_official(code) { "" } else { "*" }, name);

@@ -13,6 +13,7 @@ pub struct Bus {
     cpu_vram: [u8; 0x800], // 2048
     rom: Rom,
     ppu: Ppu,
+    cycles: usize,
 }
 
 impl Bus {
@@ -23,7 +24,17 @@ impl Bus {
             cpu_vram: [0; 0x800],
             rom,
             ppu,
+            cycles: 0,
         }
+    }
+
+    pub fn tick(&mut self, cycles: usize) {
+        self.cycles += cycles;
+        self.ppu.tick(cycles * 3);
+    }
+
+    pub fn poll_nmi_status(&mut self) -> bool {
+        self.ppu.is_nmi_interrupt_triggered()
     }
 
     fn read_prg_rom(&self, addr: u16) -> u8 {

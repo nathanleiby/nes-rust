@@ -42,6 +42,9 @@ pub struct Ppu {
     #[allow(dead_code)]
     nmi_interrupt: bool,
     read_data_buffer: u8,
+
+    scanline: usize,
+    clock_cycles: usize,
 }
 
 impl Ppu {
@@ -56,7 +59,35 @@ impl Ppu {
 
             registers: Default::default(),
             read_data_buffer: 0,
+
+            scanline: 0,
+            clock_cycles: 0,
         }
+    }
+
+    pub fn tick(&mut self, cycles: usize) {
+        self.clock_cycles += cycles;
+        // each scanline lasts for 341 PPU clock cycles
+        let scanline = cycles / 341;
+        if self.scanline < 241 && scanline >= 241 && self
+                .registers
+                .control
+                .contains(ControlRegister::VBLANK_NMI_ENABLE) {
+            // upon entering scanline 241, PPU triggers NMI interrupt
+            self.nmi_interrupt = true;
+            // The VBlank flag of the PPU is set at tick 1 (the second tick) of scanline 241
+            // Here we are approximating that. There's a rare edge cases
+            self.registers.status &= StatusRegister::VBLANK_FLAG
+        }
+
+        // the PPU renders 262 scan lines per frame
+        if self.scanline < 262 && scanline >= 262 {
+            // TODO: any behavior at end of frame?
+            self.nmi_interrupt = false;
+        }
+
+        self.clock_cycles %= 262 * 341;
+        self.scanline = scanline % 262;
     }
 
     #[allow(dead_code)]
