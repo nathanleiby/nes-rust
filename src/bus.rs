@@ -16,7 +16,9 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn new(rom: Rom, ppu: Ppu) -> Self {
+    pub fn new(rom: Rom) -> Self {
+        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
+
         Bus {
             cpu_vram: [0; 0x800],
             rom,
@@ -37,15 +39,26 @@ impl Bus {
 }
 
 impl Mem for Bus {
-    fn mem_read(&self, addr: u16) -> u8 {
+    fn mem_read(&mut self, addr: u16) -> u8 {
         if (RAM..RAM_MIRROR_END).contains(&addr) {
             let a = addr & 0b1110_0111_1111_1111;
             self.cpu_vram[a as usize]
         } else if (PPU..PPU_MIRROR_END).contains(&addr) {
             // The PPU exposes 8 registers. They are mirrored every 8 bytes in this range.
-            let addr = (addr % 8) + 0x2000;
-
-            todo!("PPU NYI")
+            let register_idx = addr % 8;
+            match register_idx {
+                0 | 1 | 3 | 5 | 6 => panic!(
+                    "attempt to read from write-only PPU register: 0x200{}",
+                    register_idx
+                ),
+                2 => todo!("NYI: read PPU Status"),
+                4 => todo!("NYI: read OAM data (sprite data)"),
+                7 => self.ppu.read_data(),
+                8..=u16::MAX => panic!("invalid PPU register IDX: {}", register_idx),
+            }
+        } else if addr == 0x4016 {
+            // 2.9	OAMDMA - Sprite DMA ($4014 write)
+            panic!("attempt to read from write-only PPU register: 0x4016 (OAMDMA - Sprite DMA)");
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
             self.read_prg_rom(addr)
         } else {
@@ -58,7 +71,22 @@ impl Mem for Bus {
             let a = addr & 0b1110_0111_1111_1111;
             self.cpu_vram[a as usize] = data
         } else if (PPU..PPU_MIRROR_END).contains(&addr) {
-            todo!("PPU NYI")
+            // The PPU exposes 8 registers. They are mirrored every 8 bytes in this range.
+            let register_idx = addr % 8;
+            match register_idx {
+                0 => self.ppu.write_to_ctrl(data),
+                1 => todo!("write to PPU Mask"),
+                2 => panic!("attempt to write to read-only PPU register: 0x2002 (Status)",),
+                3 => todo!("write to OAM Addr"),
+                4 => todo!("write to OAM Data"),
+                5 => todo!("write to PPU Scroll"),
+                6 => self.ppu.write_to_addr(data),
+                7 => self.ppu.write_to_data(data),
+                8..=u16::MAX => panic!("invalid PPU register IDX: {}", register_idx),
+            }
+        } else if addr == 0x4016 {
+            // 2.9	OAMDMA - Sprite DMA ($4014 write)
+            panic!("attempt to read from write-only PPU register: 0x4016 (OAMDMA - Sprite DMA)");
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
             panic!("attempt to write to ROM cartridge")
         } else {
@@ -74,8 +102,7 @@ mod tests {
     #[test]
     fn test_read_mirroring() {
         let rom = Rom::new_test_rom(vec![]);
-        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
-        let mut bus = Bus::new(rom, ppu);
+        let mut bus = Bus::new(rom);
         bus.cpu_vram[0] = 123;
 
         assert_eq!(bus.mem_read(0), 123);
@@ -87,8 +114,7 @@ mod tests {
     #[test]
     fn test_write_mirroring() {
         let rom = Rom::new_test_rom(vec![]);
-        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
-        let mut bus = Bus::new(rom, ppu);
+        let mut bus = Bus::new(rom);
 
         bus.mem_write(0, 1);
         assert_eq!(bus.cpu_vram[0], 1);

@@ -106,7 +106,7 @@ fn color(byte: u8) -> Color {
     }
 }
 
-fn read_screen_state(cpu: &Cpu, screen: &mut [u8; 32 * 3 * 32]) -> bool {
+fn read_screen_state(cpu: &mut Cpu, screen: &mut [u8; 32 * 3 * 32]) -> bool {
     let mut screen_idx = 0;
     let mut updated = false;
     for i in 0x0200..0x0600 {

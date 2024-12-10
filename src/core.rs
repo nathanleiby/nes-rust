@@ -3,7 +3,6 @@ use std::env;
 use crate::{
     bus::Bus,
     ops::{is_official, lookup_opcode, OpName},
-    ppu::Ppu,
     rom::Rom,
     utility::addr_from,
 };
@@ -72,11 +71,11 @@ const DEFAULT_STACK_POINTER: u8 = 0xfd;
 const DEFAULT_STATUS: u8 = 0b100100;
 
 pub trait Mem {
-    fn mem_read(&self, addr: u16) -> u8;
+    fn mem_read(&mut self, addr: u16) -> u8;
 
     fn mem_write(&mut self, addr: u16, val: u8);
 
-    fn mem_read_u16(&self, addr: u16) -> u16 {
+    fn mem_read_u16(&mut self, addr: u16) -> u16 {
         // NES CPU uses Little-Endian addressing
         let lo = self.mem_read(addr);
         let hi = self.mem_read(addr + 1);
@@ -94,7 +93,7 @@ pub trait Mem {
 }
 
 impl Mem for Cpu {
-    fn mem_read(&self, addr: u16) -> u8 {
+    fn mem_read(&mut self, addr: u16) -> u8 {
         self.bus.mem_read(addr)
     }
 
@@ -106,7 +105,6 @@ impl Mem for Cpu {
 impl Cpu {
     pub fn new() -> Self {
         let rom = Rom::new_test_rom(vec![]);
-        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
         Cpu {
             pc: 0,
             sp: DEFAULT_STACK_POINTER,
@@ -114,7 +112,7 @@ impl Cpu {
             x: 0,
             y: 0,
             status: DEFAULT_STATUS,
-            bus: Bus::new(rom, ppu),
+            bus: Bus::new(rom),
         }
     }
 
@@ -158,13 +156,13 @@ impl Cpu {
     //
 
     /// used for the "index indirect" and "indirect indexed" lookups
-    fn mem_read_zero_page_wrapping(&self, ptr: u8) -> u16 {
+    fn mem_read_zero_page_wrapping(&mut self, ptr: u8) -> u16 {
         let lo = self.mem_read(ptr as u16);
         let hi = self.mem_read(ptr.wrapping_add(1) as u16);
         (hi as u16) << 8 | (lo as u16)
     }
 
-    fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
+    fn get_operand_address(&mut self, mode: &AddressingMode) -> u16 {
         match mode {
             AddressingMode::Immediate => self.pc,
             AddressingMode::ZeroPage => self.mem_read(self.pc) as u16,
@@ -208,16 +206,15 @@ impl Cpu {
     //
 
     pub fn load_rom(&mut self, rom: Rom) {
-        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
-        self.set_bus(Bus::new(rom, ppu));
+        self.set_bus(Bus::new(rom));
     }
 
     // Test Helpers
 
     fn _load_test_rom(&mut self, program: Vec<u8>) {
         let rom = Rom::new_test_rom(program);
-        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
-        self.set_bus(Bus::new(rom, ppu));
+
+        self.set_bus(Bus::new(rom));
     }
 
     fn _load_and_run(&mut self, program: Vec<u8>) {
@@ -828,7 +825,7 @@ impl Cpu {
         val != 0
     }
 
-    pub fn trace(&self) -> String {
+    pub fn trace(&mut self) -> String {
         // C000  4C F5 C5  JMP $C5F5                       A:00 X:00 Y:00 P:24 SP:FD PPU:  0, 21 CYC:7
 
         let code = self.mem_read(self.pc);
@@ -1625,8 +1622,8 @@ mod tests {
     #[test]
     fn test_format_trace() {
         let rom = Rom::new_test_rom(vec![]);
-        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
-        let mut bus = Bus::new(rom, ppu);
+
+        let mut bus = Bus::new(rom);
 
         bus.mem_write(100, 0xa2);
         bus.mem_write(101, 0x01);
@@ -1661,8 +1658,7 @@ mod tests {
     #[test]
     fn test_format_mem_access() {
         let rom = Rom::new_test_rom(vec![]);
-        let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
-        let mut bus = Bus::new(rom, ppu);
+        let mut bus = Bus::new(rom);
         // ORA ($33), Y
         bus.mem_write(100, 0x11);
         bus.mem_write(101, 0x33);
