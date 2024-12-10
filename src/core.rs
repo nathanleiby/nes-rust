@@ -246,8 +246,7 @@ impl Cpu {
     {
         loop {
             if self.bus.poll_nmi_status() {
-                todo!("implement NMI interrupt");
-                // self.interrupt_nmi();
+                self.interrupt_nmi();
             }
 
             callback(self);
@@ -1015,6 +1014,17 @@ impl Cpu {
     fn sre(&mut self, mode: &AddressingMode) {
         self.lsr(mode);
         self.eor(mode);
+    }
+
+    fn interrupt_nmi(&mut self) {
+        self.stack_push_u16(self.pc);
+        self.stack_push(self.status);
+
+        self.set_flag(Flag::Interrupt, true);
+
+        self.bus.tick(2);
+
+        self.pc = self.mem_read_u16(0xFFFA);
     }
 }
 

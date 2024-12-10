@@ -69,10 +69,13 @@ impl Ppu {
         self.clock_cycles += cycles;
         // each scanline lasts for 341 PPU clock cycles
         let scanline = cycles / 341;
-        if self.scanline < 241 && scanline >= 241 && self
+        if self.scanline < 241
+            && scanline >= 241
+            && self
                 .registers
                 .control
-                .contains(ControlRegister::VBLANK_NMI_ENABLE) {
+                .contains(ControlRegister::VBLANK_NMI_ENABLE)
+        {
             // upon entering scanline 241, PPU triggers NMI interrupt
             self.nmi_interrupt = true;
             // The VBlank flag of the PPU is set at tick 1 (the second tick) of scanline 241
@@ -96,8 +99,19 @@ impl Ppu {
     }
 
     pub fn write_to_ctrl(&mut self, data: u8) {
-        // TODO: bugzmanov book sets ctrl.bits directly vs recreating .. I hit an error attempting that
-        self.registers.control = ControlRegister::from_bits_truncate(data);
+        let before = &self.registers.control;
+        let after = ControlRegister::from_bits_truncate(data);
+
+        // should we toggle an NMI interrupt?
+        let is_vblank_state = self.registers.status.contains(StatusRegister::VBLANK_FLAG);
+        let enabled_vblank_nmi = after.contains(ControlRegister::VBLANK_NMI_ENABLE)
+            && !before.contains(ControlRegister::VBLANK_NMI_ENABLE);
+        if is_vblank_state && enabled_vblank_nmi {
+            self.nmi_interrupt = true;
+        }
+
+        // update the register's value
+        self.registers.control = after;
     }
 
     pub fn write_to_mask(&mut self, data: u8) {
