@@ -54,6 +54,10 @@ impl GamepadRegister {
             self.current_idx = 0;
         }
     }
+
+    pub fn set_button_status(&mut self, button: GamepadButtons, pressed: bool) {
+        self.button_status.set(button, pressed);
+    }
 }
 
 #[cfg(test)]
@@ -64,7 +68,7 @@ mod tests {
     fn test_strobe_bit() {
         let mut g = GamepadRegister::new();
 
-        g.button_status.insert(GamepadButtons::ButtonA);
+        g.set_button_status(GamepadButtons::ButtonA, true);
 
         assert_eq!(g.current_idx, 0);
         assert_eq!(1, g.read());
