@@ -14,7 +14,7 @@ bitflags! {
     }
 }
 
-struct GamepadRegister {
+pub struct GamepadRegister {
     current_idx: u8,
 
     button_status: GamepadButtons,
@@ -36,11 +36,14 @@ impl GamepadRegister {
     pub fn read(&mut self) -> u8 {
         // TOOD: handle strobe bit behavior
 
-        if self.current_idx >= 8 {
+        if self.current_idx > 7 {
             1
         } else {
-            self.current_idx += 1;
+            println!("bits: 0b{:08b}", self.button_status.bits());
             let is_current_button_pressed = self.button_status.bits() & (1 << self.current_idx) > 0;
+            if !self.strobe {
+                self.current_idx += 1;
+            }
             is_current_button_pressed as u8
         }
     }
@@ -67,7 +70,7 @@ mod tests {
         assert_eq!(1, g.read());
         assert_eq!(g.current_idx, 1);
 
-        for i in 2..8 {
+        for i in 2..=8 {
             assert_eq!(0, g.read());
             assert_eq!(g.current_idx, i);
         }
@@ -76,23 +79,35 @@ mod tests {
             assert_eq!(
                 1,
                 g.read(),
-                "should continually return 1's until a strobe mode change"
-            )
-        }
-
-        g.write(0);
-
-        for _ in 0..3 {
-            assert_eq!(
-                1,
-                g.read(),
-                "should continually return 1's until a strobe mode change"
+                "should continually return 1's because we've already read all buttons. until a strobe mode change"
             )
         }
 
         g.write(1);
 
+        for _ in 0..3 {
+            assert_eq!(
+                1,
+                g.read(),
+                "should continually return 1's because strobe bit is on. we're reading ButtonA over and over"
+            )
+        }
+
+        g.write(0);
+
         assert_eq!(g.read(), 1);
-        assert_eq!(g.read(), 0);
+
+        for i in 2..=8 {
+            assert_eq!(0, g.read());
+            assert_eq!(g.current_idx, i);
+        }
+
+        for _ in 0..3 {
+            assert_eq!(
+                1,
+                g.read(),
+                "should continually return 1's because we've already read all buttons. until a strobe mode change"
+            )
+        }
     }
 }

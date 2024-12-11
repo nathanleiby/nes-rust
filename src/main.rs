@@ -7,6 +7,7 @@ use std::time::Duration;
 
 mod bus;
 mod core;
+mod gamepad;
 mod macros;
 mod ops;
 mod ppu;

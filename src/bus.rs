@@ -1,4 +1,4 @@
-use crate::{core::Mem, ppu::Ppu, rom::Rom};
+use crate::{core::Mem, gamepad::GamepadRegister, ppu::Ppu, rom::Rom};
 
 const RAM: u16 = 0x0000;
 const RAM_MIRROR_END: u16 = 0x2000;
@@ -13,6 +13,8 @@ pub struct Bus {
     cpu_vram: [u8; 0x800], // 2048
     rom: Rom,
     ppu: Ppu,
+    gamepad1: GamepadRegister,
+    gamepad2: GamepadRegister,
     cycles: usize,
 }
 
@@ -25,6 +27,8 @@ impl Bus {
             rom,
             ppu,
             cycles: 0,
+            gamepad1: GamepadRegister::new(),
+            gamepad2: GamepadRegister::new(),
         }
     }
 
@@ -77,6 +81,10 @@ impl Mem for Bus {
             panic!("attempt to read from write-only PPU register: 0x4016 (OAMDMA - Sprite DMA)");
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
             self.read_prg_rom(addr)
+        } else if addr == 0x4016 {
+            self.gamepad1.read()
+        } else if addr == 0x4017 {
+            self.gamepad2.read()
         } else {
             0
         }
@@ -110,6 +118,10 @@ impl Mem for Bus {
                 "attempt to write to addr=0x{:04X}. This will be the APU, later!",
                 addr
             )
+        } else if addr == 0x4016 {
+            self.gamepad1.write(data);
+        } else if addr == 0x4017 {
+            self.gamepad2.write(data);
         } else {
             todo!("attempt to write to memory addr=0x{:04X}", addr)
         };
