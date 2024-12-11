@@ -47,6 +47,11 @@ impl Bus {
 
         self.rom.prg_rom[idx as usize]
     }
+
+    /// returns (scanline, clock_cycles)
+    pub(crate) fn get_ppu_tick_status(&self) -> (usize, usize) {
+        self.ppu.get_tick_status()
+    }
 }
 
 impl Mem for Bus {
@@ -95,13 +100,18 @@ impl Mem for Bus {
                 7 => self.ppu.write_to_data(data),
                 8..=u16::MAX => panic!("invalid PPU register IDX: {}", register_idx),
             }
-        } else if addr == 0x4016 {
+        } else if addr == 0x4014 {
             // 2.9	OAMDMA - Sprite DMA ($4014 write)
             panic!("attempt to read from write-only PPU register: 0x4016 (OAMDMA - Sprite DMA)");
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
             panic!("attempt to write to ROM cartridge")
+        } else if [0x4000, 0x4001, 0x4002, 0x4003, 0x4004, 0x4015, 0x4017].contains(&addr) {
+            todo!(
+                "attempt to write to addr=0x{:04X}. This will be the APU, later!",
+                addr
+            )
         } else {
-            panic!("attempt to write to NYI section of memory")
+            todo!("attempt to write to memory addr=0x{:04X}", addr)
         };
     }
 }

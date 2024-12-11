@@ -4,7 +4,7 @@ use crate::{
     bus::Bus,
     ops::{addressing_mode_to_size, is_official, lookup_opcode, OpName},
     rom::Rom,
-    utility::addr_from,
+    utility::{addr_from, is_addr_at_page_edge, is_page_cross},
 };
 
 /// CPU (Central Processing Unit)
@@ -33,6 +33,9 @@ pub struct Cpu {
 
     /// Bus
     bus: Bus,
+
+    /// CPU Cycles
+    cycles: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -113,6 +116,7 @@ impl Cpu {
             y: 0,
             status: DEFAULT_STATUS,
             bus: Bus::new(rom),
+            cycles: 0,
         }
     }
 
@@ -156,27 +160,49 @@ impl Cpu {
     //
 
     /// used for the "index indirect" and "indirect indexed" lookups
-    fn mem_read_zero_page_wrapping(&mut self, ptr: u8) -> u16 {
+    fn mem_read_zero_page_wrapping(&mut self, ptr: u8) -> (u16, bool) {
         let lo = self.mem_read(ptr as u16);
-        let hi = self.mem_read(ptr.wrapping_add(1) as u16);
-        (hi as u16) << 8 | (lo as u16)
+        let (hi_ptr, is_page_crossed) = ptr.overflowing_add(1);
+        let hi = self.mem_read(hi_ptr as u16);
+
+        let result = (hi as u16) << 8 | (lo as u16);
+
+        (result, is_page_crossed)
     }
 
-    fn get_operand_address(&mut self, mode: &AddressingMode) -> u16 {
-        match mode {
+    /// returns (u16: operand addresss, bool: is_page_crossed)
+    fn get_operand_address2(&mut self, mode: &AddressingMode, tick_on_page_cross: bool) -> u16 {
+        let mut page_was_crossed = false;
+        let addr = match mode {
             AddressingMode::Immediate => self.pc,
             AddressingMode::ZeroPage => self.mem_read(self.pc) as u16,
             AddressingMode::ZeroPageX => self.mem_read(self.pc).wrapping_add(self.x) as u16,
             AddressingMode::ZeroPageY => self.mem_read(self.pc).wrapping_add(self.y) as u16,
             AddressingMode::Absolute => self.mem_read_u16(self.pc),
-            AddressingMode::AbsoluteX => self.mem_read_u16(self.pc).wrapping_add(self.x as u16),
-            AddressingMode::AbsoluteY => self.mem_read_u16(self.pc).wrapping_add(self.y as u16),
+            AddressingMode::AbsoluteX => {
+                let base = self.mem_read_u16(self.pc);
+                let result = base.wrapping_add(self.x as u16);
+
+                if is_page_cross(base, result) {
+                    page_was_crossed = true;
+                }
+
+                result
+            }
+            AddressingMode::AbsoluteY => {
+                let base = self.mem_read_u16(self.pc);
+                let result = base.wrapping_add(self.y as u16);
+
+                if is_page_cross(base, result) {
+                    page_was_crossed = true;
+                }
+
+                result
+            }
             AddressingMode::Indirect => {
                 let base = self.mem_read_u16(self.pc);
 
-                let is_edge_of_page = base & 0x00ff == 0xff;
-
-                if is_edge_of_page {
+                if is_addr_at_page_edge(base) {
                     let first = self.mem_read(base);
                     // Intentionally wrap incorrectly, to recreate buggy behavior from original 6502
                     let second = self.mem_read(base & 0xff00);
@@ -189,16 +215,38 @@ impl Cpu {
                 // "Indexed indirect"
                 let base = self.mem_read(self.pc);
                 let target = base.wrapping_add(self.x); // indexed
-                self.mem_read_zero_page_wrapping(target) // indirect
+                let (result, _) = self.mem_read_zero_page_wrapping(target); // indirect
+
+                if is_addr_at_page_edge(result) {
+                    page_was_crossed = true;
+                }
+
+                result
             }
             AddressingMode::IndirectY => {
                 // "Indirect indexed"
                 let base = self.mem_read(self.pc);
-                let target = self.mem_read_zero_page_wrapping(base); // indirect
-                target.wrapping_add(self.y as u16) // indexed
+                let (target, _) = self.mem_read_zero_page_wrapping(base); // indirect
+                let result = target.wrapping_add(self.y as u16); // indexed
+
+                if is_addr_at_page_edge(base as u16) || is_addr_at_page_edge(target) {
+                    page_was_crossed = true;
+                }
+
+                result
             }
             _ => panic!("mode {:?} is not supported", mode),
+        };
+
+        if tick_on_page_cross && page_was_crossed {
+            self.tick(1)
         }
+
+        addr
+    }
+
+    fn get_operand_address(&mut self, mode: &AddressingMode) -> u16 {
+        self.get_operand_address2(mode, false)
     }
 
     //
@@ -244,6 +292,9 @@ impl Cpu {
     where
         F: FnMut(&mut Cpu),
     {
+        // This simulates the wait time for the PPU to start
+        self.tick(7);
+
         loop {
             if self.bus.poll_nmi_status() {
                 self.interrupt_nmi();
@@ -286,7 +337,7 @@ impl Cpu {
                 OpName::LDX => self.ldx(&mode),
                 OpName::LDY => self.ldy(&mode),
                 OpName::LSR => self.lsr(&mode),
-                OpName::NOP => self.nop(),
+                OpName::NOP => self.nop(&mode, cycles.1),
                 OpName::ORA => self.ora(&mode),
                 OpName::ROL => self.rol(&mode),
                 OpName::ROR => self.ror(&mode),
@@ -347,18 +398,18 @@ impl Cpu {
                 OpName::RRA => self.rra(&mode),
             }
 
-            // TODO: Handle extra cycles behavior
-            // (1) page wrapping behavior for some ops that adds +1 to the number of cycles
-            //      Memory page size is 256 bytes. For example, the range [0x0000 .. 0x00FF]- belongs to page 0, [0x0100 .. 0x01FF] belongs to page 1, etc.
-            //     It's enough to compare the upper byte of the addresses to see if they are on the same page.
-            // (2) branching behavior that adds +1 or +2 to cycles
-            self.bus.tick(cycles.0 as usize);
+            self.tick(cycles.0 as usize);
 
             // some operations modify the pc, like JMP. We shouldn't override that.
             if self.pc == saved_pc {
                 self.pc += size - 1;
             }
         }
+    }
+
+    fn tick(&mut self, cycles: usize) {
+        self.cycles += cycles;
+        self.bus.tick(cycles);
     }
 
     fn jsr(&mut self, mode: &AddressingMode) {
@@ -446,7 +497,18 @@ impl Cpu {
         let displacement = self.mem_read(self.pc) as i8;
 
         if self.get_flag(flag) == is_set {
-            self.pc = (self.pc as isize + 1 + displacement as isize) as u16
+            let before = self.pc;
+            let after = (self.pc as isize + 1 + displacement as isize) as u16;
+            self.pc = after;
+
+            // We set `before+2` so that we only check if we've moved to a DIFFERENT page given the branching scenario.
+            let before_plus = before + 2;
+            // This behavior is based on nestest.log line 1107
+            if is_page_cross(before_plus, after) {
+                self.tick(2);
+            } else {
+                self.tick(1);
+            }
         }
     }
 
@@ -598,7 +660,7 @@ impl Cpu {
 
     /// LDA (LoaD Accumulator)
     fn lda(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
+        let addr = self.get_operand_address2(mode, true);
         let param = self.mem_read(addr);
 
         self.a = param;
@@ -607,7 +669,7 @@ impl Cpu {
 
     /// LDX (LoaD X register)
     fn ldx(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
+        let addr = self.get_operand_address2(mode, true);
         let param = self.mem_read(addr);
 
         self.x = param;
@@ -616,7 +678,7 @@ impl Cpu {
 
     /// LDY (LoaD Y register)
     fn ldy(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
+        let addr = self.get_operand_address2(mode, true);
         let param = self.mem_read(addr);
 
         self.y = param;
@@ -646,7 +708,12 @@ impl Cpu {
     }
 
     /// NOP (No OPeration)
-    fn nop(&mut self) {}
+    fn nop(&mut self, mode: &AddressingMode, tick_on_page_cross: bool) {
+        if tick_on_page_cross {
+            // Run this for the side-effect of possibly ticking one cycle
+            self.get_operand_address2(mode, tick_on_page_cross);
+        }
+    }
 
     /// ORA (bitwise OR with Accumulator)
     fn ora(&mut self, mode: &AddressingMode) {
@@ -847,6 +914,9 @@ impl Cpu {
     pub fn trace(&mut self) -> String {
         // C000  4C F5 C5  JMP $C5F5                       A:00 X:00 Y:00 P:24 SP:FD PPU:  0, 21 CYC:7
 
+        let cpu_cycles = self.cycles;
+        let (ppu_frame, ppu_cycles) = self.bus.get_ppu_tick_status();
+
         let code = self.mem_read(self.pc);
         let param1 = self.mem_read(self.pc + 1);
         let param2 = self.mem_read(self.pc + 2);
@@ -904,7 +974,7 @@ impl Cpu {
             }
             AddressingMode::IndirectX => {
                 let indexed = param1.wrapping_add(self.x);
-                let indirect = self.mem_read_zero_page_wrapping(indexed);
+                let (indirect, _) = self.mem_read_zero_page_wrapping(indexed);
                 let data = self.mem_read(indirect);
 
                 format!(
@@ -913,7 +983,7 @@ impl Cpu {
                 )
             }
             AddressingMode::IndirectY => {
-                let indirect = self.mem_read_zero_page_wrapping(param1);
+                let (indirect, _) = self.mem_read_zero_page_wrapping(param1);
                 let indexed = indirect.wrapping_add(self.y as u16);
                 let data = self.mem_read(indexed);
                 format!(
@@ -952,7 +1022,7 @@ impl Cpu {
         };
 
         format!(
-            "{:04X}  {:02X} {} {} {:>4} {:<28}A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}", //  PPU:{:>3},{:>3} CYC:{:>4}
+            "{:04X}  {:02X} {} {} {:>4} {:<28}A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X} PPU:{:>3},{:>3} CYC:{}",
             self.pc,
             code,
             if size >= 2 {
@@ -972,9 +1042,9 @@ impl Cpu {
             self.y,
             self.status,
             self.sp,
-            // 0,
-            // 0,
-            // 0
+            ppu_frame,
+            ppu_cycles % 341,
+            cpu_cycles,
         )
         .to_string()
     }
@@ -1673,15 +1743,15 @@ mod tests {
             result.push(cpu.trace());
         });
         assert_eq!(
-            "0064  A2 01     LDX #$01                        A:01 X:02 Y:03 P:24 SP:FD",
+            "0064  A2 01     LDX #$01                        A:01 X:02 Y:03 P:24 SP:FD PPU:  0, 21 CYC:7",
             result[0]
         );
         assert_eq!(
-            "0066  CA        DEX                             A:01 X:01 Y:03 P:24 SP:FD",
+            "0066  CA        DEX                             A:01 X:01 Y:03 P:24 SP:FD PPU:  0, 27 CYC:9",
             result[1]
         );
         assert_eq!(
-            "0067  88        DEY                             A:01 X:00 Y:03 P:26 SP:FD",
+            "0067  88        DEY                             A:01 X:00 Y:03 P:26 SP:FD PPU:  0, 33 CYC:11",
             result[2]
         );
     }
@@ -1710,7 +1780,7 @@ mod tests {
             result.push(cpu.trace());
         });
         assert_eq!(
-            "0064  11 33     ORA ($33),Y = 0400 @ 0400 = AA  A:00 X:00 Y:00 P:24 SP:FD",
+            "0064  11 33     ORA ($33),Y = 0400 @ 0400 = AA  A:00 X:00 Y:00 P:24 SP:FD PPU:  0, 21 CYC:7",
             result[0]
         );
     }
@@ -1737,7 +1807,7 @@ mod tests {
             })
         });
 
-        let expected = fs::read("nestest_no_cycles.log").unwrap();
+        let expected = fs::read("nestest.log").unwrap();
 
         let actual = match mutex_result.lock() {
             Ok(m) => m,

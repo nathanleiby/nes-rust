@@ -68,7 +68,7 @@ impl Ppu {
     pub fn tick(&mut self, cycles: usize) {
         self.clock_cycles += cycles;
         // each scanline lasts for 341 PPU clock cycles
-        let scanline = cycles / 341;
+        let scanline = self.clock_cycles / 341;
         if self.scanline < 241
             && scanline >= 241
             && self
@@ -91,6 +91,11 @@ impl Ppu {
 
         self.clock_cycles %= 262 * 341;
         self.scanline = scanline % 262;
+    }
+
+    /// returns (scanline, clock_cycles)
+    pub fn get_tick_status(&self) -> (usize, usize) {
+        (self.scanline, self.clock_cycles)
     }
 
     #[allow(dead_code)]
