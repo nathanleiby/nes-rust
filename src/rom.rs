@@ -56,6 +56,7 @@ impl Rom {
         let mapper = match rom_mapper_type {
             0 => Mapper::Zero,
             _ => todo!(),
+            // _ => Mapper::Zero, // TODO: Hack to get tiles viewing.. but should revert to TODO
         };
 
         let mirroring = match (is_four_screen, is_vertical_screen) {
