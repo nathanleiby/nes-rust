@@ -9,7 +9,7 @@ use crate::{
 
 /// CPU (Central Processing Unit)
 /// The NES uses  2A03, which is a modified version of the 6502 chip.
-pub struct Cpu {
+pub struct Cpu<'a> {
     /// program counter
     pc: u16,
 
@@ -32,7 +32,7 @@ pub struct Cpu {
     status: u8,
 
     /// Bus
-    bus: Bus,
+    bus: Bus<'a>,
 
     /// CPU Cycles
     cycles: usize,
@@ -95,7 +95,7 @@ pub trait Mem {
     }
 }
 
-impl Mem for Cpu {
+impl Mem for Cpu<'_> {
     fn mem_read(&mut self, addr: u16) -> u8 {
         self.bus.mem_read(addr)
     }
@@ -105,7 +105,7 @@ impl Mem for Cpu {
     }
 }
 
-impl Cpu {
+impl<'a, 'b: 'a> Cpu<'a> {
     pub fn new() -> Self {
         let rom = Rom::new_test_rom(vec![]);
         Cpu {
@@ -120,7 +120,7 @@ impl Cpu {
         }
     }
 
-    pub fn set_bus(&mut self, bus: Bus) {
+    pub fn set_bus(&mut self, bus: Bus<'b>) {
         self.bus = bus
     }
 
@@ -911,6 +911,20 @@ impl Cpu {
         val != 0
     }
 
+    pub fn tracelite(&mut self) -> String {
+        // format!("PC = {:04X}", self.pc)
+        let code = self.mem_read(self.pc);
+        let op = lookup_opcode(code);
+
+        let cpu_cycles = self.cycles;
+        let (ppu_frame, ppu_cycles) = self.bus.get_ppu_tick_status();
+
+        format!(
+            "pc={:04X} op={} CPU: {} .. PPU: {},{}",
+            self.pc, op.0, cpu_cycles, ppu_frame, ppu_cycles
+        )
+    }
+
     pub fn trace(&mut self) -> String {
         // C000  4C F5 C5  JMP $C5F5                       A:00 X:00 Y:00 P:24 SP:FD PPU:  0, 21 CYC:7
 
@@ -928,6 +942,7 @@ impl Cpu {
         let size = addressing_mode_to_size(&mode);
 
         let tla = format!("{}{}", if is_official(code) { "" } else { "*" }, name);
+        // let addr_block = "<OMITTED>";
         let addr_block = match mode {
             AddressingMode::Immediate => format!("#${:02X}", param1),
             AddressingMode::ZeroPage => {

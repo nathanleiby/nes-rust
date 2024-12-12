@@ -9,17 +9,25 @@ const PPU_MIRROR_END: u16 = 0x4000;
 pub const PRG_ROM_START: u16 = 0x8000;
 const PRG_ROM_END: u16 = 0xFFFF;
 
-pub struct Bus {
+pub struct Bus<'call> {
     cpu_vram: [u8; 0x800], // 2048
     rom: Rom,
     ppu: Ppu,
     gamepad1: GamepadRegister,
     gamepad2: GamepadRegister,
     cycles: usize,
+    gameloop_callback: Box<dyn FnMut(&Ppu) + 'call>,
 }
 
-impl Bus {
+impl<'a> Bus<'a> {
     pub fn new(rom: Rom) -> Self {
+        Bus::new_with_cb(rom, |_| {})
+    }
+
+    pub fn new_with_cb<'call, F>(rom: Rom, gameloop_callback: F) -> Self
+    where
+        F: FnMut(&Ppu) + 'call + 'a,
+    {
         let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
 
         Bus {
@@ -29,12 +37,19 @@ impl Bus {
             cycles: 0,
             gamepad1: GamepadRegister::new(),
             gamepad2: GamepadRegister::new(),
+            gameloop_callback: Box::from(gameloop_callback),
         }
     }
 
     pub fn tick(&mut self, cycles: usize) {
         self.cycles += cycles;
-        self.ppu.tick(cycles * 3);
+
+        let should_rerender = self.ppu.tick(cycles * 3);
+
+        if should_rerender {
+            println!("doing gameloop callback, to try to render the screen");
+            (self.gameloop_callback)(&self.ppu)
+        }
     }
 
     pub fn poll_nmi_status(&mut self) -> bool {
@@ -58,7 +73,7 @@ impl Bus {
     }
 }
 
-impl Mem for Bus {
+impl Mem for Bus<'_> {
     fn mem_read(&mut self, addr: u16) -> u8 {
         if (RAM..RAM_MIRROR_END).contains(&addr) {
             let a = addr & 0b1110_0111_1111_1111;
@@ -67,10 +82,11 @@ impl Mem for Bus {
             // The PPU exposes 8 registers. They are mirrored every 8 bytes in this range.
             let register_idx = addr % 8;
             match register_idx {
-                0 | 1 | 3 | 5 | 6 => panic!(
-                    "attempt to read from write-only PPU register: 0x200{}",
-                    register_idx
-                ),
+                // 0 | 1 | 3 | 5 | 6 => panic!(
+                //     "attempt to read from write-only PPU register: 0x200{}",
+                //     register_idx
+                // ),
+                0 | 1 | 3 | 5 | 6 => 0, // TODO
                 2 => self.ppu.read_from_status(),
                 4 => self.ppu.read_from_oam_data(),
                 7 => self.ppu.read_from_data(),

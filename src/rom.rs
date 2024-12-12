@@ -15,6 +15,7 @@ enum Mapper {
 pub struct Rom {
     pub prg_rom: Vec<u8>,
 
+    /// CHR ROM (also called "pattern tables"), which contains the visual graphics data of a game.
     pub chr_rom: Vec<u8>,
 
     #[allow(dead_code)]

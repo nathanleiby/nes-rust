@@ -96,6 +96,9 @@ impl Frame {
         }
     }
 
+    // tile_n can be thought of as the offset in the pattern table  (CHR ROM)
+    // pos (*8) relates to the value in the name table.
+    /// VRAM (also called "name tables")
     pub fn draw_tile(&mut self, chr_rom: &[u8], bank: usize, tile_n: usize, pos: (usize, usize)) {
         assert!(bank <= 1);
 
@@ -113,7 +116,14 @@ impl Frame {
                 let hi_bit = second_byte & which_bit > 0;
                 let palette_idx: u8 = (hi_bit as u8) << 1 + (lo_bit as u8);
                 // TODO: lookup palette color
-                let color = SYSTEM_PALLETE[palette_idx as usize];
+                // let color = SYSTEM_PALLETE[(palette_idx * 3) as usize];
+                let color = match palette_idx {
+                    0 => SYSTEM_PALLETE[0x01],
+                    1 => SYSTEM_PALLETE[0x23],
+                    2 => SYSTEM_PALLETE[0x27],
+                    3 => SYSTEM_PALLETE[0x30],
+                    _ => panic!("can't be"),
+                };
 
                 self.set_pixel(x + col, y + row, color);
             }
@@ -147,6 +157,20 @@ pub struct Ppu {
     /// CHR ROM (also called "pattern tables")
     chr_rom: Vec<u8>,
     /// VRAM (also called "name tables")
+
+    /// 1024 bytes make up a single "Frame"
+    /// The PPU has 2048 bytes here, representing 2 frames.
+    /// NOTE: the PPU is addressable via 4096 bytes, meaning there's some remapping of those additional bytes.
+    ///         This is either via Mirroring, or maps to extra RAM on the Cartridge.
+    ///
+    /// The background of the 256x240 screen is made by doing lookups of 32x30 bytes (0x2000 to 0x23BF), each byte an 8x8 sprite from the selected "Pattern Table"
+    /// Top Left  = 0x2000, Top Right = 0x201F
+    ///     ...                 ...
+    /// Bot Let   = 0x23A0, Bot Right = 0x23BF
+    /// The choice of Pattern Table Bank is determined by the PPU's Control Register (BACKGROUND_PATTERN_ADDR)
+    ///
+    /// The remaining 64 bytes make up the Color Palette.
+    /// A
     vram: [u8; 2048],
     palettes: [u8; 32],
     oam_data: [u8; 256],
@@ -181,10 +205,56 @@ impl Ppu {
         }
     }
 
-    pub fn tick(&mut self, cycles: usize) {
+    // tile_n can be thought of as the offset in the pattern table  (CHR ROM)
+    // pos (*8) relates to the value in the name table.
+    /// VRAM (also called "name tables")
+    pub fn draw_background(&self, frame: &mut Frame) {
+        // Determine which nametable is being used for the current screen (by reading bit 0 and bit 1 from Control register)
+        let which_nametable = self
+            .registers
+            .control
+            .intersection(ControlRegister::NAMETABLE)
+            .bits() as usize;
+        assert!(which_nametable <= 3);
+
+        // Determine which CHR ROM bank is used for background tiles (by reading bit 4 from Control Register)
+        let bank = self
+            .registers
+            .control
+            .intersection(ControlRegister::BACKGROUND_PATTERN_ADDR)
+            .bits() as usize;
+        assert!(bank <= 1);
+
+        let tile_size = 8;
+        for y in 0..30 {
+            for x in 0..32 {
+                // // Get the relevant tile_n
+                // let tile_idx = 0x2000 + (0x0020 * y) + x;
+                // assert!(tile_idx >= 0x2000 && tile_idx < 0x23C0);
+                // // let tile_n = self.chr_rom[0x2000 + (0x0020 * y) + x] as usize;
+                // let tile_n = self.chr_rom[0x2000 + (0x0020 * y) + x] as usize;
+                // assert!(tile_n < 512);
+
+                let tile_n = self.vram[y * 30 + x] as usize;
+
+                frame.draw_tile(&self.chr_rom, bank, tile_n, (x * tile_size, y * tile_size));
+            }
+        }
+    }
+
+    // TODO: Write some unit tests around tick() .. seems like it's not triggering
+    pub fn tick(&mut self, cycles: usize) -> bool {
+        let mut should_rerender = false;
+
         self.clock_cycles += cycles;
         // each scanline lasts for 341 PPU clock cycles
         let scanline = self.clock_cycles / 341;
+
+        if self.scanline > scanline {
+            // If the vblank flag is not cleared by reading, it will be cleared automatically on dot 1 of the prerender scanline.
+            self.registers.status.remove(StatusRegister::VBLANK_FLAG);
+        }
+
         if self.scanline < 241
             && scanline >= 241
             && self
@@ -192,11 +262,13 @@ impl Ppu {
                 .control
                 .contains(ControlRegister::VBLANK_NMI_ENABLE)
         {
+            println!("scanline 241");
             // upon entering scanline 241, PPU triggers NMI interrupt
             self.nmi_interrupt = true;
             // The VBlank flag of the PPU is set at tick 1 (the second tick) of scanline 241
             // Here we are approximating that. There's a rare edge cases
-            self.registers.status &= StatusRegister::VBLANK_FLAG
+            self.registers.status.insert(StatusRegister::VBLANK_FLAG);
+            should_rerender = true
         }
 
         // the PPU renders 262 scan lines per frame
@@ -207,6 +279,8 @@ impl Ppu {
 
         self.clock_cycles %= 262 * 341;
         self.scanline = scanline % 262;
+
+        should_rerender
     }
 
     /// returns (scanline, clock_cycles)
@@ -345,7 +419,12 @@ impl Ppu {
         self.registers.address.is_lo_byte = false;
         self.registers.scroll.is_y_scroll = false;
 
-        self.registers.status.bits()
+        let result = self.registers.status.bits();
+
+        // Reading PPUSTATUS will return the current state of the Vblank flag and then clear it
+        self.registers.status.remove(StatusRegister::VBLANK_FLAG);
+
+        result
     }
 }
 
@@ -365,7 +444,7 @@ bitflags! {
     /// |+-------- PPU master/slave select
     /// |          (0: read backdrop from EXT pins; 1: output color on EXT pins)
     /// +--------- Vblank NMI enable (0: off, 1: on)
-    #[derive(Default)]
+    #[derive(Default, Clone, Copy)]
     pub struct ControlRegister: u8 {
         const NAMETABLE = 0b11;
         // Current nametable bits in PPUCTRL bits 0 and 1 can equivalently be considered the most significant bit of the scroll coordinates, which are 9 bits wide

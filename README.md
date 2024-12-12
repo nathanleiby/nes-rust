@@ -22,7 +22,9 @@ Priorities:
   - https://www.nesdev.org/obelisk-6502-guide/reference.html
   - http://www.6502.org/tutorials/6502opcodes.html
 - NES Test Roms: https://github.com/christopherpow/nes-test-roms
-- Other Roms: https://www.nesfiles.com/Games
+- Other Roms:
+  - https://www.nesworld.com/article.php?system=nes&data=neshomebrew
+  - https://www.nesfiles.com/Games
 - 6502 details
   - overflow and underflow: https://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
 

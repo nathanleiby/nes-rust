@@ -1,8 +1,10 @@
 use core::Cpu;
 use core::Mem;
 use std::collections::HashMap;
+use std::env;
 use std::error::Error;
 use std::fs;
+use std::process::exit;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -15,8 +17,10 @@ mod ppu;
 mod rom;
 mod utility;
 
+use bus::Bus;
 use gamepad::GamepadButtons;
 use ppu::Frame;
+use ppu::Ppu;
 use rand::random;
 use rom::Rom;
 use sdl2::event::Event;
@@ -48,10 +52,23 @@ impl KeyboardInput {
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
+    // Check usage
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        println!("usage: nes-rust <rom.nes>");
+        exit(1);
+    }
+    let program = fs::read(&args[1])?;
+
+    // Bootstrap SDL (Graphics)
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
     let window = video_subsystem
-        .window("Tile Viewer", (256.0 * 3.0) as u32, (240.0 * 3.0) as u32)
+        .window(
+            "Game Background",
+            (256.0 * 3.0) as u32,
+            (240.0 * 3.0) as u32,
+        )
         .position_centered()
         .build()?;
 
@@ -62,118 +79,94 @@ fn main() -> Result<(), Box<dyn Error>> {
     let creator = canvas.texture_creator();
     let mut texture = creator.create_texture_target(PixelFormatEnum::RGB24, 256, 240)?;
 
-    // let mut screen_state = [0_u8; 32 * 3 * 32];
+    // Try drawing.. something
+    canvas.present();
 
-    // TODO: get program name from args at CLI
-    let program = fs::read("roms/Alter_Ego.nes").unwrap();
-    // let program = fs::read("roms/pacman.nes").unwrap();
-    // let program = fs::read("roms/Ms_pacman.nes").unwrap();
-
-    let mut cpu = Cpu::new();
+    // Setup the CPU to run the program
     let rom = Rom::new(&program);
 
     let mut frame = Frame::new();
 
-    let tiles_per_row = 24;
-    let tile_size = 8 + 1;
-    for bank in 0..=1 {
-        for tile_n in 0..256 {
-            let x = tile_n % tiles_per_row;
-            let y = tile_n / tiles_per_row + bank * 12;
+    let mut cpu = Cpu::new();
 
-            frame.draw_tile(&rom.chr_rom, bank, tile_n, (x * tile_size, y * tile_size));
+    let bus = Bus::new_with_cb(rom, move |ppu| {
+        ppu.draw_background(&mut frame);
+
+        // redraw the screen
+        texture.update(None, &frame.data, 256 * 3).unwrap();
+        canvas.copy(&texture, None, None).unwrap();
+        canvas.present();
+
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => std::process::exit(0),
+                _ => { /* do nothing */ }
+            }
         }
-    }
+    });
 
-    // if read_screen_state(cpu, &mut screen_state.data) {
-    //     // redraw the screen
-    //     texture.update(None, &screen_state.d, 32 * 3).unwrap();
-    //     canvas.copy(&texture, None, None).unwrap();
-    //     canvas.present();
-    // }
-    texture.update(None, &frame.data, 256 * 3).unwrap();
-    canvas.copy(&texture, None, None).unwrap();
-    canvas.present();
+    cpu.set_bus(bus);
+    cpu.reset();
 
-    loop {
-        handle_user_input(&mut cpu, &mut event_pump);
-    }
-    // cpu.load_rom(rom);
-    // cpu.reset();
-    // cpu.run_with_callback(move |cpu| {
-    //     println!("{}", cpu.trace());
+    cpu.run_with_callback(|cpu| {
+        // println!("{}", cpu.trace());
+        // println!("{}", cpu.tracelite());
 
-    //     // read user input and write it to mem[0xFF]
-    //     handle_user_input(cpu, &mut event_pump);
+        // update mem[0xFE] with a new random number
+        cpu.mem_write(0xFE, random::<u8>());
 
-    //     // update mem[0xFE] with a new random number
-    //     cpu.mem_write(0xFE, random::<u8>());
+        // TODO: re-enable user input
+        // handle_user_input(cpu, &mut event_pump);
 
-    //     // read mem mapped screen state
-    //     if read_screen_state(cpu, &mut screen_state) {
-    //         // redraw the screen
-    //         texture.update(None, &screen_state, 32 * 3).unwrap();
-    //         canvas.copy(&texture, None, None).unwrap();
-    //         canvas.present();
-    //     }
-
-    //     sleep(Duration::new(0, 70_000));
-    // });
+        // sleep(Duration::new(0, 70_000));
+    });
 
     Ok(())
 }
 
-fn handle_user_input(cpu: &mut Cpu, event_pump: &mut EventPump) {
-    for event in event_pump.poll_iter() {
-        match event {
-            Event::Quit { .. }
-            | Event::KeyDown {
-                keycode: Some(Keycode::Escape),
-                ..
-            } => std::process::exit(0),
-            Event::KeyDown {
-                keycode: Some(kc), ..
-            } => match kc {
-                Keycode::W => cpu.mem_write(0xFF, 0x77),
-                Keycode::S => cpu.mem_write(0xFF, 0x73),
-                Keycode::A => cpu.mem_write(0xFF, 0x61),
-                Keycode::D => cpu.mem_write(0xFF, 0x64),
-                _ => { /* ignore other keys for now */ }
-            },
-            _ => { /* do nothing */ }
-        }
-    }
-}
+// fn handle_user_input(cpu: &mut Cpu, event_pump: &mut EventPump) {
+//     let keys = KeyboardInput::new();
 
-fn color(byte: u8) -> Color {
-    match byte {
-        0 => sdl2::pixels::Color::BLACK,
-        1 => sdl2::pixels::Color::WHITE,
-        2 | 9 => sdl2::pixels::Color::GREY,
-        3 | 10 => sdl2::pixels::Color::RED,
-        4 | 11 => sdl2::pixels::Color::GREEN,
-        5 | 12 => sdl2::pixels::Color::BLUE,
-        6 | 13 => sdl2::pixels::Color::MAGENTA,
-        7 | 14 => sdl2::pixels::Color::YELLOW,
-        _ => sdl2::pixels::Color::CYAN,
-    }
-}
-
-// fn read_screen_state(cpu: &mut Cpu, screen: &mut [u8; 32 * 3 * 32]) -> bool {
-//     let mut screen_idx = 0;
-//     let mut updated = false;
-//     for i in 0x0200..0x0600 {
-//         let color_idx = cpu.mem_read(i as u16);
-//         let (b1, b2, b3) = color(color_idx).rgb();
-//         if screen[screen_idx] != b1 || screen[screen_idx + 1] != b2 || screen[screen_idx + 2] != b3
-//         {
-//             screen[screen_idx] = b1;
-//             screen[screen_idx + 1] = b2;
-//             screen[screen_idx + 2] = b3;
-//             updated = true
+//     for event in event_pump.poll_iter() {
+//         match event {
+//             Event::Quit { .. }
+//             | Event::KeyDown {
+//                 keycode: Some(Keycode::Escape),
+//                 ..
+//             } => std::process::exit(0),
+//             Event::KeyDown {
+//                 keycode: Some(kc), ..
+//             } => {
+//                 if let Some(button) = keys.key_map.get(&kc) {
+//                     todo!("set button as PRESSED in gamepad1 (GamepadRegister");
+//                 }
+//             }
+//             Event::KeyUp {
+//                 keycode: Some(kc), ..
+//             } => {
+//                 if let Some(button) = keys.key_map.get(&kc) {
+//                     todo!("set button as RELEASED in gamepad1 (GamepadRegister");
+//                 }
+//             }
+//             _ => { /* do nothing */ }
 //         }
-//         screen_idx += 3;
 //     }
+// }
 
-//     updated
+// fn color(byte: u8) -> Color {
+//     match byte {
+//         0 => sdl2::pixels::Color::BLACK,
+//         1 => sdl2::pixels::Color::WHITE,
+//         2 | 9 => sdl2::pixels::Color::GREY,
+//         3 | 10 => sdl2::pixels::Color::RED,
+//         4 | 11 => sdl2::pixels::Color::GREEN,
+//         5 | 12 => sdl2::pixels::Color::BLUE,
+//         6 | 13 => sdl2::pixels::Color::MAGENTA,
+//         7 | 14 => sdl2::pixels::Color::YELLOW,
+//         _ => sdl2::pixels::Color::CYAN,
+//     }
 // }
