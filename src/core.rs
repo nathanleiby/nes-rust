@@ -59,7 +59,7 @@ pub enum AddressingMode {
 pub enum Flag {
     Carry, // 0th bit
     Zero,
-    Interrupt,
+    InterruptDisable,
     Decimal,
     Break,
     Break2,
@@ -293,10 +293,11 @@ impl<'a, 'b: 'a> Cpu<'a> {
         F: FnMut(&mut Cpu),
     {
         // This simulates the wait time for the PPU to start
-        self.tick(7);
+        // TODO: I really hope this isn't it but could this cause problems for pacman.nes?
+        // self.tick(7);
 
         loop {
-            if self.bus.poll_nmi_status() {
+            if self.bus.poll_nmi_interrupt() {
                 self.interrupt_nmi();
             }
 
@@ -366,8 +367,8 @@ impl<'a, 'b: 'a> Cpu<'a> {
 
                 OpName::CLC => self.set_flag(Flag::Carry, false),
                 OpName::SEC => self.set_flag(Flag::Carry, true),
-                OpName::CLI => self.set_flag(Flag::Interrupt, false),
-                OpName::SEI => self.set_flag(Flag::Interrupt, true),
+                OpName::CLI => self.set_flag(Flag::InterruptDisable, false),
+                OpName::SEI => self.set_flag(Flag::InterruptDisable, true),
                 OpName::CLV => self.set_flag(Flag::Overflow, false),
                 OpName::CLD => self.set_flag(Flag::Decimal, false),
                 OpName::SED => self.set_flag(Flag::Decimal, true),
@@ -876,7 +877,7 @@ impl<'a, 'b: 'a> Cpu<'a> {
         let shift = match flag {
             Flag::Carry => 0,
             Flag::Zero => 1,
-            Flag::Interrupt => 2,
+            Flag::InterruptDisable => 2,
             Flag::Decimal => 3,
             Flag::Break => 4,
             Flag::Break2 => 5,
@@ -898,7 +899,7 @@ impl<'a, 'b: 'a> Cpu<'a> {
         let shift = match flag {
             Flag::Carry => 0,
             Flag::Zero => 1,
-            Flag::Interrupt => 2,
+            Flag::InterruptDisable => 2,
             Flag::Decimal => 3,
             Flag::Break => 4,
             Flag::Break2 => 5,
@@ -942,99 +943,99 @@ impl<'a, 'b: 'a> Cpu<'a> {
         let size = addressing_mode_to_size(&mode);
 
         let tla = format!("{}{}", if is_official(code) { "" } else { "*" }, name);
-        // let addr_block = "<OMITTED>";
-        let addr_block = match mode {
-            AddressingMode::Immediate => format!("#${:02X}", param1),
-            AddressingMode::ZeroPage => {
-                format!("${:02X} = {:02X}", param1, self.mem_read(param1 as u16))
-            }
-            AddressingMode::ZeroPageX => {
-                let offset = param1.wrapping_add(self.x);
-                let data = self.mem_read(offset as u16);
-                format!("${:02X},X @ {:02X} = {:02X}", param1, offset, data)
-            }
-            AddressingMode::ZeroPageY => {
-                let offset = param1.wrapping_add(self.y);
-                let data = self.mem_read(offset as u16);
-                format!("${:02X},Y @ {:02X} = {:02X}", param1, offset, data)
-            }
-            AddressingMode::Absolute => {
-                let hi = (param2 as u16) << 8;
-                let addr: u16 = hi + (param1 as u16);
-                match name {
-                    OpName::JMP | OpName::JSR => format!("${:02X}{:02X}", param2, param1,),
-                    _ => format!(
-                        "${:02X}{:02X} = {:02X}",
-                        param2,
-                        param1,
-                        self.mem_read(addr)
-                    ),
-                }
-            }
-            AddressingMode::AbsoluteX => {
-                let addr = addr_from(param1, param2).wrapping_add(self.x as u16);
-                let data = self.mem_read(addr);
-                format!(
-                    "${:02X}{:02X},X @ {:04X} = {:02X}",
-                    param2, param1, addr, data
-                )
-            }
-            AddressingMode::AbsoluteY => {
-                let addr = addr_from(param1, param2).wrapping_add(self.y as u16);
-                let data = self.mem_read(addr);
-                format!(
-                    "${:02X}{:02X},Y @ {:04X} = {:02X}",
-                    param2, param1, addr, data
-                )
-            }
-            AddressingMode::IndirectX => {
-                let indexed = param1.wrapping_add(self.x);
-                let (indirect, _) = self.mem_read_zero_page_wrapping(indexed);
-                let data = self.mem_read(indirect);
+        let addr_block = format!("<OMITTED> ({:04X}) ({:04X})", param1, param2);
+        // let addr_block = match mode {
+        //     AddressingMode::Immediate => format!("#${:02X}", param1),
+        //     AddressingMode::ZeroPage => {
+        //         format!("${:02X} = {:02X}", param1, self.mem_read(param1 as u16))
+        //     }
+        //     AddressingMode::ZeroPageX => {
+        //         let offset = param1.wrapping_add(self.x);
+        //         let data = self.mem_read(offset as u16);
+        //         format!("${:02X},X @ {:02X} = {:02X}", param1, offset, data)
+        //     }
+        //     AddressingMode::ZeroPageY => {
+        //         let offset = param1.wrapping_add(self.y);
+        //         let data = self.mem_read(offset as u16);
+        //         format!("${:02X},Y @ {:02X} = {:02X}", param1, offset, data)
+        //     }
+        //     AddressingMode::Absolute => {
+        //         let hi = (param2 as u16) << 8;
+        //         let addr: u16 = hi + (param1 as u16);
+        //         match name {
+        //             OpName::JMP | OpName::JSR => format!("${:02X}{:02X}", param2, param1,),
+        //             _ => format!(
+        //                 "${:02X}{:02X} = {:02X}",
+        //                 param2,
+        //                 param1,
+        //                 self.mem_read(addr)
+        //             ),
+        //         }
+        //     }
+        //     AddressingMode::AbsoluteX => {
+        //         let addr = addr_from(param1, param2).wrapping_add(self.x as u16);
+        //         let data = self.mem_read(addr);
+        //         format!(
+        //             "${:02X}{:02X},X @ {:04X} = {:02X}",
+        //             param2, param1, addr, data
+        //         )
+        //     }
+        //     AddressingMode::AbsoluteY => {
+        //         let addr = addr_from(param1, param2).wrapping_add(self.y as u16);
+        //         let data = self.mem_read(addr);
+        //         format!(
+        //             "${:02X}{:02X},Y @ {:04X} = {:02X}",
+        //             param2, param1, addr, data
+        //         )
+        //     }
+        //     AddressingMode::IndirectX => {
+        //         let indexed = param1.wrapping_add(self.x);
+        //         let (indirect, _) = self.mem_read_zero_page_wrapping(indexed);
+        //         let data = self.mem_read(indirect);
 
-                format!(
-                    "(${:02X},X) @ {:02X} = {:04X} = {:02X}",
-                    param1, indexed, indirect, data
-                )
-            }
-            AddressingMode::IndirectY => {
-                let (indirect, _) = self.mem_read_zero_page_wrapping(param1);
-                let indexed = indirect.wrapping_add(self.y as u16);
-                let data = self.mem_read(indexed);
-                format!(
-                    "(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
-                    param1, indirect, indexed, data
-                )
-            }
-            AddressingMode::Relative => {
-                format!(
-                    "${:04X}",
-                    (self.pc as isize + 2 + (param1 as i8) as isize) as u16
-                )
-            }
-            AddressingMode::Accumulator => "A".to_string(),
-            AddressingMode::Indirect => {
-                // Copied from get_operand_address.
-                // TODO: Figure out how to share things better here, given pc is off by 1
-                let indirect = {
-                    let base = self.mem_read_u16(self.pc + 1);
+        //         format!(
+        //             "(${:02X},X) @ {:02X} = {:04X} = {:02X}",
+        //             param1, indexed, indirect, data
+        //         )
+        //     }
+        //     AddressingMode::IndirectY => {
+        //         let (indirect, _) = self.mem_read_zero_page_wrapping(param1);
+        //         let indexed = indirect.wrapping_add(self.y as u16);
+        //         let data = self.mem_read(indexed);
+        //         format!(
+        //             "(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
+        //             param1, indirect, indexed, data
+        //         )
+        //     }
+        //     AddressingMode::Relative => {
+        //         format!(
+        //             "${:04X}",
+        //             (self.pc as isize + 2 + (param1 as i8) as isize) as u16
+        //         )
+        //     }
+        //     AddressingMode::Accumulator => "A".to_string(),
+        //     AddressingMode::Indirect => {
+        //         // Copied from get_operand_address.
+        //         // TODO: Figure out how to share things better here, given pc is off by 1
+        //         let indirect = {
+        //             let base = self.mem_read_u16(self.pc + 1);
 
-                    let is_edge_of_page = base & 0x00ff == 0xff;
+        //             let is_edge_of_page = base & 0x00ff == 0xff;
 
-                    if is_edge_of_page {
-                        let first = self.mem_read(base);
-                        // Intentionally wrap incorrectly, to recreate buggy behavior from original 6502
-                        let second = self.mem_read(base & 0xff00);
-                        ((second as u16) << 8) + first as u16
-                    } else {
-                        self.mem_read_u16(base)
-                    }
-                };
+        //             if is_edge_of_page {
+        //                 let first = self.mem_read(base);
+        //                 // Intentionally wrap incorrectly, to recreate buggy behavior from original 6502
+        //                 let second = self.mem_read(base & 0xff00);
+        //                 ((second as u16) << 8) + first as u16
+        //             } else {
+        //                 self.mem_read_u16(base)
+        //             }
+        //         };
 
-                format!("(${:02X}{:02X}) = {:04X}", param2, param1, indirect)
-            }
-            _ => "".to_string(),
-        };
+        //         format!("(${:02X}{:02X}) = {:04X}", param2, param1, indirect)
+        //     }
+        //     _ => "".to_string(),
+        // };
 
         format!(
             "{:04X}  {:02X} {} {} {:>4} {:<28}A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X} PPU:{:>3},{:>3} CYC:{}",
@@ -1103,9 +1104,10 @@ impl<'a, 'b: 'a> Cpu<'a> {
 
     fn interrupt_nmi(&mut self) {
         self.stack_push_u16(self.pc);
+        // TODO: Might need to flip bits on the Break1 and Break2 flags
         self.stack_push(self.status);
 
-        self.set_flag(Flag::Interrupt, true);
+        self.set_flag(Flag::InterruptDisable, true);
 
         self.bus.tick(2);
 

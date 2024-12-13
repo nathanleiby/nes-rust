@@ -45,15 +45,13 @@ impl<'a> Bus<'a> {
         self.cycles += cycles;
 
         let should_rerender = self.ppu.tick(cycles * 3);
-
         if should_rerender {
-            println!("doing gameloop callback, to try to render the screen");
             (self.gameloop_callback)(&self.ppu)
         }
     }
 
-    pub fn poll_nmi_status(&mut self) -> bool {
-        self.ppu.is_nmi_interrupt_triggered()
+    pub fn poll_nmi_interrupt(&mut self) -> bool {
+        self.ppu.poll_nmi_interrupt().is_some()
     }
 
     fn read_prg_rom(&self, addr: u16) -> u8 {
@@ -126,14 +124,15 @@ impl Mem for Bus<'_> {
             }
         } else if addr == 0x4014 {
             // 2.9	OAMDMA - Sprite DMA ($4014 write)
-            panic!("attempt to read from write-only PPU register: 0x4016 (OAMDMA - Sprite DMA)");
+            todo!("write to 0x4016 (OAMDMA - Sprite DMA)");
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
             panic!("attempt to write to ROM cartridge")
         } else if [0x4000, 0x4001, 0x4002, 0x4003, 0x4004, 0x4015, 0x4017].contains(&addr) {
-            todo!(
-                "attempt to write to addr=0x{:04X}. This will be the APU, later!",
-                addr
-            )
+            // todo!(
+            //     "attempt to write to addr=0x{:04X}. This will be the APU, later!",
+            //     addr
+            // )
+            // TODO
         } else if addr == 0x4016 {
             self.gamepad1.write(data);
         } else if addr == 0x4017 {

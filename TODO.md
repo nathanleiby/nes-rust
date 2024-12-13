@@ -1,5 +1,7 @@
-- [ ] write unit tests for PPU scanline behavior
+- [x] write unit tests for PPU scanline behavior
   - why? I'm not seeing the NMI callback get triggered
+  - I verified it is happening, given the right register setup..
+  - Seems like this is my bug... https://www.reddit.com/r/EmuDev/comments/cvat7z/comment/ey37336/
 - [ ] refactor to split up functionality more
   - why? one of my goals is to learn better Rust patterns for project layout
   - why? I would find it easier to think about testable units

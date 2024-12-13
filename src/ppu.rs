@@ -39,13 +39,24 @@ impl Frame {
 
         let tile_size_bytes = 16;
         let bank_size_bytes: usize = 4096;
+        let tile_size = 8;
 
         let (x, y) = pos;
-        for row in 0..8 {
-            let first_byte = chr_rom[bank * bank_size_bytes + tile_n * tile_size_bytes + row];
-            let second_byte = chr_rom[bank * bank_size_bytes + tile_n * tile_size_bytes + 8 + row];
+        for row in 0..tile_size {
+            let first_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + row;
+            let first_byte = chr_rom[first_byte_idx];
+            let second_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + 8 + row;
+            let second_byte = chr_rom[second_byte_idx];
 
-            for col in 0..8 {
+            log::info!(
+                "1: [{:04x}] {:04x} , 2: [{:04x}] {:04x}",
+                first_byte_idx,
+                first_byte,
+                second_byte_idx,
+                second_byte
+            );
+
+            for col in 0..tile_size {
                 let which_bit = 1 << (7 - col);
                 let lo_bit = first_byte & which_bit > 0;
                 let hi_bit = second_byte & which_bit > 0;
@@ -60,7 +71,7 @@ impl Frame {
                     _ => panic!("can't be"),
                 };
 
-                self.set_pixel(x + col, y + row, color);
+                self.set_pixel((x * tile_size) + col, (y * tile_size) + row, color);
             }
         }
     }
@@ -114,8 +125,7 @@ pub struct Ppu {
 
     registers: PpuRegisters,
 
-    #[allow(dead_code)]
-    nmi_interrupt: bool,
+    nmi_interrupt: Option<()>,
     read_data_buffer: u8,
 
     /// scanline within the Frame. There are 262 total (0..=261)
@@ -132,7 +142,7 @@ impl Ppu {
             vram: [0; 2048],
             palettes: [0; 32],
             oam_data: [0; 256],
-            nmi_interrupt: false,
+            nmi_interrupt: None,
 
             registers: Default::default(),
             read_data_buffer: 0,
@@ -162,7 +172,6 @@ impl Ppu {
             .bits() as usize;
         assert!(bank <= 1);
 
-        let tile_size = 8;
         for y in 0..30 {
             for x in 0..32 {
                 // // Get the relevant tile_n
@@ -173,8 +182,10 @@ impl Ppu {
                 // assert!(tile_n < 512);
 
                 let tile_n = self.vram[y * 30 + x] as usize;
+                log::info!("tile_n = {}", tile_n);
+                // let tile_n = 1;
 
-                frame.draw_tile(&self.chr_rom, bank, tile_n, (x * tile_size, y * tile_size));
+                frame.draw_tile(&self.chr_rom, bank, tile_n, (x, y));
             }
         }
     }
@@ -187,12 +198,15 @@ impl Ppu {
         // each scanline lasts for 341 PPU clock cycles
         let scanline = self.clock_cycles / 341;
 
-        if self.scanline < 241 && scanline >= 241 && self.is_vblank_nmi_enabled() {
+        if self.scanline < 241 && scanline >= 241 {
             // upon entering scanline 241, PPU triggers NMI interrupt
-            self.nmi_interrupt = true;
+            if self.is_vblank_nmi_enabled() {
+                self.nmi_interrupt = Some(());
+            }
             // The VBlank flag of the PPU is set at tick 1 (the second tick) of scanline 241
             // Here we are approximating that by clearing on dot 0 or above.
             self.set_ppu_vblank_status(true);
+            // TODO: self.status.set_sprite_zero_hit(false);
             should_rerender = true
         }
 
@@ -201,7 +215,8 @@ impl Ppu {
             // If the vblank flag is not cleared by reading, it will be cleared automatically on dot 1 of the prerender scanline.
             // Here we are approximating that by clearing on dot 0 or above.
             self.set_ppu_vblank_status(false);
-            self.nmi_interrupt = false;
+            self.nmi_interrupt = None;
+            // TODO: self.status.set_sprite_zero_hit(false);
         }
 
         self.clock_cycles %= 262 * 341;
@@ -227,8 +242,8 @@ impl Ppu {
         (self.scanline, self.clock_cycles)
     }
 
-    pub fn is_nmi_interrupt_triggered(&self) -> bool {
-        self.nmi_interrupt
+    pub fn poll_nmi_interrupt(&mut self) -> Option<()> {
+        self.nmi_interrupt.take()
     }
 
     pub fn write_to_ctrl(&mut self, data: u8) {
@@ -240,7 +255,7 @@ impl Ppu {
         let enabled_vblank_nmi = after.contains(ControlRegister::VBLANK_NMI_ENABLE)
             && !before.contains(ControlRegister::VBLANK_NMI_ENABLE);
         if is_vblank_state && enabled_vblank_nmi {
-            self.nmi_interrupt = true;
+            self.nmi_interrupt = Some(());
         }
 
         // update the register's value
@@ -352,11 +367,11 @@ impl Ppu {
     }
 
     pub fn read_from_status(&mut self) -> u8 {
+        let result = self.registers.status.bits();
+
         // Reading this register has the side effect of clearing the PPU's internal w register.
         // It is commonly read before writes to PPUSCROLL and PPUADDR to ensure the writes occur in the correct order.
         self.reset_latch();
-
-        let result = self.registers.status.bits();
 
         // Reading PPUSTATUS will return the current state of the Vblank flag and then clear it
         self.set_ppu_vblank_status(false);
@@ -469,7 +484,7 @@ struct PpuScrollRegister {
 
 #[cfg(test)]
 mod tests {
-    use crate::rom::Rom;
+    use crate::{assert_eq_bits, rom::Rom};
 
     use super::*;
 
@@ -492,7 +507,7 @@ mod tests {
         let mut ppu = new_test_ppu();
 
         assert_eq!(ppu.get_tick_status(), (0, 0));
-        assert_eq!(ppu.nmi_interrupt, false);
+        assert_eq!(ppu.nmi_interrupt, None);
         assert_eq!(
             ppu.registers.status.contains(StatusRegister::VBLANK_FLAG),
             false,
@@ -511,7 +526,7 @@ mod tests {
         let should_rerender = ppu.tick(240 * 341);
         assert_eq!(ppu.get_tick_status(), (241, 241 * 341));
         assert!(should_rerender);
-        assert!(ppu.is_nmi_interrupt_triggered());
+        assert!(ppu.poll_nmi_interrupt().is_none());
         assert!(get_ppu_vblank_status(&mut ppu));
 
         let should_rerender = ppu.tick(21 * 341);
@@ -521,7 +536,7 @@ mod tests {
             "should wrap back scanline to 0 after 262 scanlines"
         );
         assert!(!should_rerender);
-        assert!(!ppu.is_nmi_interrupt_triggered());
+        assert!(ppu.poll_nmi_interrupt().is_none());
         assert!(!get_ppu_vblank_status(&mut ppu));
     }
 
@@ -539,5 +554,25 @@ mod tests {
             status, 0,
             "the first read from status should have reset the VBlank flag"
         );
+    }
+
+    #[test]
+    fn test_write_to_ctrl_can_trigger_nmi_if_status_in_vblank() {
+        let mut ppu = new_test_ppu();
+        assert_eq_bits!(ppu.registers.control.bits(), 0);
+        assert!(ppu.poll_nmi_interrupt().is_none());
+        ppu.write_to_ctrl(ControlRegister::VBLANK_NMI_ENABLE.bits());
+        assert!(ppu.poll_nmi_interrupt().is_none());
+
+        ppu.registers.status.insert(StatusRegister::VBLANK_FLAG);
+        ppu.write_to_ctrl(ControlRegister::VBLANK_NMI_ENABLE.bits());
+        assert!(ppu.poll_nmi_interrupt().is_none());
+
+        ppu.registers.control = ControlRegister::empty();
+        ppu.write_to_ctrl(ControlRegister::VBLANK_NMI_ENABLE.bits());
+        assert!(ppu.poll_nmi_interrupt().is_some());
+
+        // should consume the interrupt by polling it
+        assert!(ppu.poll_nmi_interrupt().is_none());
     }
 }
