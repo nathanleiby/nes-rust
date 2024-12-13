@@ -27,6 +27,8 @@ Priorities:
   - https://www.nesfiles.com/Games
 - 6502 details
   - overflow and underflow: https://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+- Making Games
+  - and more.. https://github.com/denisenepraunig/nes-development
 
 ### Other interesting Tools
 

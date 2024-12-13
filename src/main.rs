@@ -8,11 +8,13 @@ use std::process::exit;
 use std::thread::sleep;
 use std::time::Duration;
 
+mod addr_register;
 mod bus;
 mod core;
 mod gamepad;
 mod macros;
 mod ops;
+mod pallete;
 mod ppu;
 mod rom;
 mod utility;

@@ -1,5 +1,14 @@
-- [ ] allow running in step-wise debugger mode.. BREAK at a given pc position
-  - this would let me quickly inspect processor state to repair issues in nestest
+- [ ] write unit tests for PPU scanline behavior
+  - why? I'm not seeing the NMI callback get triggered
+- [ ] refactor to split up functionality more
+  - why? one of my goals is to learn better Rust patterns for project layout
+  - why? I would find it easier to think about testable units
+
+
+- [ ] Debugger
+  - [ ] allow requesting a to break at a given pc position (run until pc=X) or at a given OP (run until op=STA)
+    - this would let me quickly inspect processor state to repair issues in nestest
+    - this would help me not run too far when isolating an issue. in particular in my current PPU debugging
 - [x] add a function to set status flags more easily (bitflags or similar)
 - [ ] allow lookup of opcode from op name + addressing mode, esp for use in tests to give clarity and reduce typos of op codes
 - [ ] add tests cases for PPU registers
@@ -8,7 +17,6 @@
 - [ ] Extract "tileset viewer" subproject
   - CLI that you run and it pops up a view of the game's tilesets
 - [ ] Extract subproject: 6502 emulator .. as REPL?
-- [ ] Add a nice looking debugger
 - [ ] Is there a way to get a nice trace that doesn't manipulate registers which cause side effects of READ operations?
   Right now, running a trace causes a program to fail :( :(
 
@@ -23,3 +31,8 @@ SHOULD BE: 06c7
 Learn
 - arithmetic vs logical shift
 
+-------------
+
+PRs upstream:
+
+- [ ] Explain in the book that trace() needs to be deactivated (if it does) due to side-effects of READ ops
