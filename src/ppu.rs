@@ -118,7 +118,9 @@ pub struct Ppu {
     nmi_interrupt: bool,
     read_data_buffer: u8,
 
+    /// scanline within the Frame. There are 262 total (0..=261)
     scanline: usize,
+    /// clock_cycles within the Frame (0..=261*341)
     clock_cycles: usize,
 }
 
@@ -185,30 +187,20 @@ impl Ppu {
         // each scanline lasts for 341 PPU clock cycles
         let scanline = self.clock_cycles / 341;
 
-        if self.scanline > scanline {
-            // If the vblank flag is not cleared by reading, it will be cleared automatically on dot 1 of the prerender scanline.
-            self.registers.status.remove(StatusRegister::VBLANK_FLAG);
-        }
-
-        if self.scanline < 241
-            && scanline >= 241
-            && self
-                .registers
-                .control
-                .contains(ControlRegister::VBLANK_NMI_ENABLE)
-        {
-            println!("scanline 241");
+        if self.scanline < 241 && scanline >= 241 && self.is_vblank_nmi_enabled() {
             // upon entering scanline 241, PPU triggers NMI interrupt
             self.nmi_interrupt = true;
             // The VBlank flag of the PPU is set at tick 1 (the second tick) of scanline 241
-            // Here we are approximating that. There's a rare edge cases
-            self.registers.status.insert(StatusRegister::VBLANK_FLAG);
+            // Here we are approximating that by clearing on dot 0 or above.
+            self.set_ppu_vblank_status(true);
             should_rerender = true
         }
 
         // the PPU renders 262 scan lines per frame
         if self.scanline < 262 && scanline >= 262 {
-            // TODO: any behavior at end of frame?
+            // If the vblank flag is not cleared by reading, it will be cleared automatically on dot 1 of the prerender scanline.
+            // Here we are approximating that by clearing on dot 0 or above.
+            self.set_ppu_vblank_status(false);
             self.nmi_interrupt = false;
         }
 
@@ -218,12 +210,23 @@ impl Ppu {
         should_rerender
     }
 
+    fn set_ppu_vblank_status(&mut self, is_vblank_active: bool) {
+        self.registers
+            .status
+            .set(StatusRegister::VBLANK_FLAG, is_vblank_active)
+    }
+
+    fn is_vblank_nmi_enabled(&mut self) -> bool {
+        self.registers
+            .control
+            .contains(ControlRegister::VBLANK_NMI_ENABLE)
+    }
+
     /// returns (scanline, clock_cycles)
     pub fn get_tick_status(&self) -> (usize, usize) {
         (self.scanline, self.clock_cycles)
     }
 
-    #[allow(dead_code)]
     pub fn is_nmi_interrupt_triggered(&self) -> bool {
         self.nmi_interrupt
     }
@@ -356,7 +359,7 @@ impl Ppu {
         let result = self.registers.status.bits();
 
         // Reading PPUSTATUS will return the current state of the Vblank flag and then clear it
-        self.registers.status.remove(StatusRegister::VBLANK_FLAG);
+        self.set_ppu_vblank_status(false);
 
         result
     }
@@ -462,4 +465,79 @@ struct PpuScrollRegister {
 
     // TODO: Actually controlled by w_register, which is shared with AddrRegister
     is_y_scroll: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::rom::Rom;
+
+    use super::*;
+
+    // #[test]
+    // fn test_addr_and_data_register() {
+    //     todo!()
+    // }
+
+    fn get_ppu_vblank_status(ppu: &mut Ppu) -> bool {
+        ppu.registers.status.contains(StatusRegister::VBLANK_FLAG)
+    }
+
+    fn new_test_ppu() -> Ppu {
+        let rom = Rom::new_test_rom(vec![]);
+        Ppu::new(rom.chr_rom.clone(), rom.mirroring)
+    }
+
+    #[test]
+    fn test_tick() {
+        let mut ppu = new_test_ppu();
+
+        assert_eq!(ppu.get_tick_status(), (0, 0));
+        assert_eq!(ppu.nmi_interrupt, false);
+        assert_eq!(
+            ppu.registers.status.contains(StatusRegister::VBLANK_FLAG),
+            false,
+        );
+        assert_eq!(ppu.is_vblank_nmi_enabled(), false);
+
+        ppu.registers
+            .control
+            .insert(ControlRegister::VBLANK_NMI_ENABLE);
+        assert_eq!(ppu.is_vblank_nmi_enabled(), true);
+
+        ppu.tick(1 * 341);
+        assert_eq!(ppu.get_tick_status(), (1, 341));
+        assert_eq!(get_ppu_vblank_status(&mut ppu), false);
+
+        let should_rerender = ppu.tick(240 * 341);
+        assert_eq!(ppu.get_tick_status(), (241, 241 * 341));
+        assert!(should_rerender);
+        assert!(ppu.is_nmi_interrupt_triggered());
+        assert!(get_ppu_vblank_status(&mut ppu));
+
+        let should_rerender = ppu.tick(21 * 341);
+        assert_eq!(
+            ppu.get_tick_status(),
+            (0, 0),
+            "should wrap back scanline to 0 after 262 scanlines"
+        );
+        assert!(!should_rerender);
+        assert!(!ppu.is_nmi_interrupt_triggered());
+        assert!(!get_ppu_vblank_status(&mut ppu));
+    }
+
+    #[test]
+    fn test_read_status_resets_vblank_flag() {
+        let mut ppu = new_test_ppu();
+        let status = ppu.read_from_status();
+        assert_eq!(status, 0);
+        ppu.registers.status.insert(StatusRegister::VBLANK_FLAG);
+
+        let status = ppu.read_from_status();
+        assert_eq!(status, 1 << 7);
+        let status = ppu.read_from_status();
+        assert_eq!(
+            status, 0,
+            "the first read from status should have reset the VBlank flag"
+        );
+    }
 }

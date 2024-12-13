@@ -115,8 +115,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     cpu.reset();
 
     cpu.run_with_callback(|cpu| {
-        // println!("{}", cpu.trace());
-        // println!("{}", cpu.tracelite());
+        if env::var("CPU_TRACE").is_ok() {
+            println!("{}", cpu.trace());
+        } else if env::var("CPU_TRACELITE").is_ok() {
+            println!("{}", cpu.tracelite());
+        }
 
         // update mem[0xFE] with a new random number
         cpu.mem_write(0xFE, random::<u8>());
