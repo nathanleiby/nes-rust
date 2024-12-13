@@ -39,7 +39,6 @@ impl GamepadRegister {
         if self.current_idx > 7 {
             1
         } else {
-            println!("bits: 0b{:08b}", self.button_status.bits());
             let is_current_button_pressed = self.button_status.bits() & (1 << self.current_idx) > 0;
             if !self.strobe {
                 self.current_idx += 1;

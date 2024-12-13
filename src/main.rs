@@ -14,7 +14,7 @@ mod core;
 mod gamepad;
 mod macros;
 mod ops;
-mod pallete;
+mod palette;
 mod ppu;
 mod rom;
 mod utility;

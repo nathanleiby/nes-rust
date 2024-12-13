@@ -2,7 +2,7 @@ use bitflags::bitflags;
 
 use crate::{
     addr_register::AddrRegister,
-    pallete::SYSTEM_PALLETE,
+    palette::SYSTEM_PALETTE,
     rom::Mirroring,
     utility::{addr_from, split_addr},
 };
@@ -48,27 +48,35 @@ impl Frame {
             let second_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + 8 + row;
             let second_byte = chr_rom[second_byte_idx];
 
-            log::info!(
-                "1: [{:04x}] {:04x} , 2: [{:04x}] {:04x}",
-                first_byte_idx,
-                first_byte,
-                second_byte_idx,
-                second_byte
-            );
+            if x == 0 && y == 0 {
+                log::info!(
+                    "(x:{:2},y:{:2}) 1: [{:04x}] {:04x} , 2: [{:04x}] {:04x}",
+                    x,
+                    y,
+                    first_byte_idx,
+                    first_byte,
+                    second_byte_idx,
+                    second_byte
+                );
+            }
 
             for col in 0..tile_size {
                 let which_bit = 1 << (7 - col);
                 let lo_bit = first_byte & which_bit > 0;
                 let hi_bit = second_byte & which_bit > 0;
-                let palette_idx: u8 = (hi_bit as u8) << 1 + (lo_bit as u8);
+                // let palette_idx: u8 = ((hi_bit as u8) << 1) + (lo_bit as u8);
+                let palette_idx: u8 = ((lo_bit as u8) << 1) + (hi_bit as u8);
+                assert!(palette_idx < 4, "palette_idx was {}", palette_idx);
                 // TODO: lookup palette color
                 // let color = SYSTEM_PALLETE[(palette_idx * 3) as usize];
                 let color = match palette_idx {
-                    0 => SYSTEM_PALLETE[0x01],
-                    1 => SYSTEM_PALLETE[0x23],
-                    2 => SYSTEM_PALLETE[0x27],
-                    3 => SYSTEM_PALLETE[0x30],
-                    _ => panic!("can't be"),
+                    0 => SYSTEM_PALETTE[0x01],
+                    1 => SYSTEM_PALETTE[0x23],
+                    2 => SYSTEM_PALETTE[0x27],
+                    3 => SYSTEM_PALETTE[0x30],
+                    _ => {
+                        panic!("can't be.. idx = {}", palette_idx)
+                    }
                 };
 
                 self.set_pixel((x * tile_size) + col, (y * tile_size) + row, color);
@@ -174,17 +182,7 @@ impl Ppu {
 
         for y in 0..30 {
             for x in 0..32 {
-                // // Get the relevant tile_n
-                // let tile_idx = 0x2000 + (0x0020 * y) + x;
-                // assert!(tile_idx >= 0x2000 && tile_idx < 0x23C0);
-                // // let tile_n = self.chr_rom[0x2000 + (0x0020 * y) + x] as usize;
-                // let tile_n = self.chr_rom[0x2000 + (0x0020 * y) + x] as usize;
-                // assert!(tile_n < 512);
-
-                let tile_n = self.vram[y * 30 + x] as usize;
-                log::info!("tile_n = {}", tile_n);
-                // let tile_n = 1;
-
+                let tile_n = self.vram[y * 32 + x] as usize;
                 frame.draw_tile(&self.chr_rom, bank, tile_n, (x, y));
             }
         }
@@ -292,21 +290,7 @@ impl Ppu {
         let val = match addr {
             0..0x2000 => self.chr_rom[addr as usize],
             0x2000..0x3F00 => {
-                // account for offset (0x2000) and remapping (0x3NNN -> 0x2NNN)
-                let base = addr & 0x0FFF;
-                let name_table_idx = base / 0x0400;
-
-                // and ROM-configured mirroring
-                let mirrored = match (self.mirroring, name_table_idx) {
-                    (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 2) => base - 0x0400,
-                    (Mirroring::Vertical, 2)
-                    | (Mirroring::Vertical, 3)
-                    | (Mirroring::Horizontal, 3) => base - 0x0800,
-                    (Mirroring::Horizontal, _) | (Mirroring::Vertical, _) => base,
-                    (Mirroring::FourScreen, _) => {
-                        todo!("Four Screen requires specicial setup with more RAM. More info: https://www.nesdev.org/wiki/Mirroring#4-Screen")
-                    }
-                };
+                let mirrored = self.mirror_vram_addr(addr);
                 self.vram[mirrored as usize]
             }
             0x3F00..0x4000 => {
@@ -321,6 +305,25 @@ impl Ppu {
         out
     }
 
+    fn mirror_vram_addr(&mut self, addr: u16) -> u16 {
+        // account for offset (0x2000) and remapping (0x3NNN -> 0x2NNN)
+        let base = addr & 0x0FFF;
+        let name_table_idx = base / 0x0400;
+
+        // and ROM-configured mirroring
+        let mirrored = match (self.mirroring, name_table_idx) {
+            (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 2) => base - 0x0400,
+            (Mirroring::Vertical, 2) | (Mirroring::Vertical, 3) | (Mirroring::Horizontal, 3) => {
+                base - 0x0800
+            }
+            (Mirroring::Horizontal, _) | (Mirroring::Vertical, _) => base,
+            (Mirroring::FourScreen, _) => {
+                todo!("Four Screen requires specicial setup with more RAM. More info: https://www.nesdev.org/wiki/Mirroring#4-Screen")
+            }
+        };
+        mirrored
+    }
+
     pub fn write_to_data(&mut self, data: u8) {
         let addr = self.registers.address.get();
         self.increment_vram_addr();
@@ -328,21 +331,7 @@ impl Ppu {
         match addr {
             0..0x2000 => panic!("attempt to write to CHR ROM (read-only)"),
             0x2000..0x3F00 => {
-                // account for offset (0x2000) and remapping (0x3NNN -> 0x2NNN)
-                let base = addr & 0x0FFF;
-                let name_table_idx = base / 0x0400;
-
-                // and ROM-configured mirroring
-                let mirrored = match (self.mirroring, name_table_idx) {
-                    (Mirroring::Horizontal, 1) => base - 0x0400,
-                    (Mirroring::Horizontal, 3) => base - 0x0C00,
-                    (Mirroring::Vertical, 2) => base - 0x0800,
-                    (Mirroring::Vertical, 3) => base - 0x0C00,
-                    (Mirroring::FourScreen, _) => {
-                        todo!("NYI. More info: https://www.nesdev.org/wiki/Mirroring#4-Screen")
-                    }
-                    _ => base,
-                };
+                let mirrored = self.mirror_vram_addr(addr);
                 self.vram[mirrored as usize] = data;
             }
             0x3F00..0x4000 => {

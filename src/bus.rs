@@ -90,9 +90,8 @@ impl Mem for Bus<'_> {
                 7 => self.ppu.read_from_data(),
                 8..=u16::MAX => panic!("invalid PPU register IDX: {}", register_idx),
             }
-        } else if addr == 0x4016 {
-            // 2.9	OAMDMA - Sprite DMA ($4014 write)
-            panic!("attempt to read from write-only PPU register: 0x4016 (OAMDMA - Sprite DMA)");
+        } else if addr == 0x4014 {
+            panic!("attempt to read from write-only PPU register: 0x4014 (OAMDMA - Sprite DMA)");
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
             self.read_prg_rom(addr)
         } else if addr == 0x4016 {
@@ -124,7 +123,7 @@ impl Mem for Bus<'_> {
             }
         } else if addr == 0x4014 {
             // 2.9	OAMDMA - Sprite DMA ($4014 write)
-            todo!("write to 0x4016 (OAMDMA - Sprite DMA)");
+            self.ppu.write_to_oam_data(data);
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
             panic!("attempt to write to ROM cartridge")
         } else if [0x4000, 0x4001, 0x4002, 0x4003, 0x4004, 0x4015, 0x4017].contains(&addr) {

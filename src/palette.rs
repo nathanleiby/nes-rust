@@ -1,4 +1,4 @@
-pub static SYSTEM_PALLETE: [(u8, u8, u8); 64] = [
+pub static SYSTEM_PALETTE: [(u8, u8, u8); 64] = [
     (0x80, 0x80, 0x80),
     (0x00, 0x3D, 0xA6),
     (0x00, 0x12, 0xB0),
