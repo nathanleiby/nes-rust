@@ -43,12 +43,10 @@ pub struct Ppu {
     /// The choice of Pattern Table Bank is determined by the PPU's Control Register (BACKGROUND_PATTERN_ADDR)
     ///
     /// The remaining 64 bytes make up the Color Palette.
-    /// A
     vram: [u8; 2048],
 
-    // TODO: Are we only allowed to use 32 of the possible 64 NES colors?
     /// Palette Table
-    palettes: [u8; 32],
+    palette_table: [u8; 32],
     oam_data: [u8; 256],
 
     mirroring: Mirroring,
@@ -88,7 +86,7 @@ impl Ppu {
             chr_rom,
             mirroring,
             vram: [0; 2048],
-            palettes: [0; 32],
+            palette_table: [0; 32],
             oam_data: [0; 256],
             nmi_interrupt: None,
 
@@ -108,32 +106,40 @@ impl Ppu {
         let start = p_idx * 4;
         [
             // The first entry is a special case
-            if is_background { self.palettes[0] } else { 0 },
-            self.palettes[start + 1],
-            self.palettes[start + 2],
-            self.palettes[start + 3],
+            if is_background {
+                self.palette_table[0]
+            } else {
+                0
+            },
+            self.palette_table[start + 1],
+            self.palette_table[start + 2],
+            self.palette_table[start + 3],
         ]
     }
 
-    // Gets the Palette for a given tile
+    /// Gets the Palette for a given tile
     /// See: https://www.nesdev.org/wiki/PPU_attribute_tables
     fn palette_for_bg_tile(&self, pos: (usize, usize)) -> PaletteIdx {
         let (x, y) = pos;
 
-        // TODO
-        let bank = 0;
-        // let bank = self.get_background_pattern_bank();
+        let which_nametable = self
+            .registers
+            .control
+            .intersection(ControlRegister::NAMETABLE)
+            .bits() as usize;
+        assert!(which_nametable <= 3);
 
         // For background tiles, the last 64 bytes of each nametable are reserved
         // for assigning a specific palette to a part of the background.
         // This section is called an attribute table.
-        let nametable_size = 1024;
+        let nametable_size = 0x400;
         let attr_table_size = 64;
-        let nt_end = nametable_size * (bank + 1);
+        let nt_end = nametable_size * (which_nametable + 1);
 
-        let attr_table = &self.vram[nt_end - attr_table_size..nt_end];
+        let attr_table_start = nt_end - attr_table_size;
         let attr_table_idx = (y / 4) * 8 + (x / 4);
-        let attr_table_byte = attr_table[attr_table_idx];
+        let attr_table_byte =
+            self.vram[self.mirror_vram_addr((attr_table_start + attr_table_idx) as u16) as usize];
 
         let meta_tile = (x % 4 < 2, y % 4 < 2);
         let shift = match meta_tile {
@@ -149,21 +155,10 @@ impl Ppu {
         PaletteIdx(palette_idx)
     }
 
-    // tile_n can be thought of as the offset in the pattern table  (CHR ROM)
-    // pos (*8) relates to the value in the name table.
     pub fn draw_background(&self, frame: &mut Frame) {
-        // Determine which nametable is being used for the current screen (by reading bit 0 and bit 1 from Control register)
-        let which_nametable = self
-            .registers
-            .control
-            .intersection(ControlRegister::NAMETABLE)
-            .bits() as usize;
-        assert!(which_nametable <= 3);
         // TODO: which_nametable isn't being used.. this likely relates to scrolling+mirroring
 
-        // TODO
-        // let bank = self.get_background_pattern_bank();
-        let bank = 0;
+        let bank = self.get_background_pattern_bank();
 
         let rows = 30;
         let cols = 32;
@@ -177,10 +172,22 @@ impl Ppu {
         }
     }
 
+    /// Determine which CHR ROM bank (Pattern Table) is used for background tiles
+    fn get_background_pattern_bank(&self) -> usize {
+        if self
+            .registers
+            .control
+            .contains(ControlRegister::BACKGROUND_PATTERN_ADDR)
+        {
+            1
+        } else {
+            0
+        }
+    }
+
     pub fn draw_sprites(&self, frame: &mut Frame) {
-        // Priority between sprites is determined by their address inside OAM.
-        // .. the sprite data that occurs first will overlap any other sprites after it..
-        // So let's draw things in reverse to handle that
+        // We iterate in reverse to handle sprite draw priority.
+        // The sprite data that occurs earlier in OAM data should overlap other sprites after it.
         for b in self.oam_data.chunks(4).rev() {
             let sprite = self.parse_sprite_from_oam_data(b);
             let palette = self.lookup_palette(sprite.palette_idx);
@@ -340,8 +347,8 @@ impl Ppu {
         let val = match addr {
             0..0x2000 => self.chr_rom[addr as usize],
             0x2000..0x3F00 => self.vram[self.mirror_vram_addr(addr) as usize],
-            0x3F00..0x4000 => self.palettes[self.mirror_palettes_addr(addr) as usize],
-            0x4000..=0xFFFF => todo!("doesn't yet handle the mirrors range"),
+            0x3F00..0x4000 => self.palette_table[self.mirror_palettes_addr(addr) as usize],
+            0x4000..=0xFFFF => todo!("doesn't yet handle the mirrors range (addr={:04X})", addr),
         };
 
         let out = self.read_data_buffer;
@@ -354,10 +361,10 @@ impl Ppu {
         self.increment_vram_addr();
 
         match addr {
-            0..0x2000 => panic!("attempt to write to CHR ROM (read-only)"),
+            0..0x2000 => panic!("attempt to write to CHR ROM: {:04X} (read-only)", addr),
             0x2000..0x3F00 => self.vram[self.mirror_vram_addr(addr) as usize] = data,
-            0x3F00..0x4000 => self.palettes[self.mirror_palettes_addr(addr) as usize] = data,
-            0x4000..=0xFFFF => todo!("doesn't yet handle the mirrors range"),
+            0x3F00..0x4000 => self.palette_table[self.mirror_palettes_addr(addr) as usize] = data,
+            0x4000..=0xFFFF => todo!("doesn't yet handle the mirrors range (addr={:04X})", addr),
         }
     }
 
@@ -367,7 +374,7 @@ impl Ppu {
             .increment(self.registers.control.vram_increment_amount());
     }
 
-    fn mirror_vram_addr(&mut self, addr: u16) -> u16 {
+    fn mirror_vram_addr(&self, addr: u16) -> u16 {
         // account for offset (0x2000) and remapping (0x3NNN -> 0x2NNN)
         let base = addr & 0x0FFF;
         let name_table_idx = base / 0x0400;
@@ -386,12 +393,12 @@ impl Ppu {
     }
 
     fn mirror_palettes_addr(&mut self, addr: u16) -> u16 {
-        (addr - 0x3F00) % (self.palettes.len() as u16)
+        (addr - 0x3F00) % (self.palette_table.len() as u16)
     }
 
     pub fn write_to_oam_data(&mut self, data: u8) {
         self.oam_data[self.registers.oam_address as usize] = data;
-        _ = self.registers.oam_address.wrapping_add(1);
+        self.registers.oam_address = self.registers.oam_address.wrapping_add(1);
     }
 
     pub fn read_from_oam_data(&mut self) -> u8 {
@@ -672,8 +679,8 @@ mod tests {
     fn test_palette_from_bg_palette_idx() {
         let mut ppu = new_test_ppu();
 
-        ppu.palettes[0] = 255;
-        ppu.palettes[1..32].copy_from_slice(Vec::from_iter(1..32).as_slice());
+        ppu.palette_table[0] = 255;
+        ppu.palette_table[1..32].copy_from_slice(Vec::from_iter(1..32).as_slice());
 
         assert_eq!(ppu.lookup_palette(PaletteIdx(0)), [255, 1, 2, 3]);
         assert_eq!(ppu.lookup_palette(PaletteIdx(1)), [255, 5, 6, 7]);

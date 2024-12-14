@@ -43,8 +43,7 @@ impl Frame {
         for row in 0..tile_size {
             let first_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + row;
             let first_byte = chr_rom[first_byte_idx];
-            let second_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + 8 + row;
-            let second_byte = chr_rom[second_byte_idx];
+            let second_byte = chr_rom[first_byte_idx + 8];
 
             if x == 0 && y == 0 {
                 log::info!(
@@ -53,7 +52,7 @@ impl Frame {
                     y,
                     first_byte_idx,
                     first_byte,
-                    second_byte_idx,
+                    first_byte_idx + 8,
                     second_byte
                 );
             }
@@ -89,7 +88,6 @@ impl Frame {
         for row in 0..tile_size {
             let first_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + row;
             let first_byte = chr_rom[first_byte_idx];
-            // let second_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + row + 8;
             let second_byte = chr_rom[first_byte_idx + 8];
 
             for col in 0..tile_size {

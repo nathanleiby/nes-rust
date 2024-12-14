@@ -1,7 +1,23 @@
 - [ ] Figure out why sprites aren't drawing
-- [ ] Investigate various crashes that are trying to write to wrong memory
+  - sprite mask not set correctly?
+- [ ] Try an external debugger and setting breakpts
+- [ ] Debugger view
+  - show both pattern tables beside the UI
+  - allow play/pause of CPU
+  - show current instruction
+  - when we get to sprite drawing,
+    - log the details
+    - highlight which pattern is being used
+  - show state of CPU (same idea as "trace")
+    - consider a non-mut mem_peek() fn, that's safe in debugging/tracing
 - [ ] Try running more NES Test roms, maybe they can help now that i have some graphics?
   - lots of the PPU test rom links here are broken.. https://www.nesdev.org/wiki/Emulator_tests
+- [ ] Investigate crash that is trying to write to wrong memory
+  - Repro-able by running Pacman a few times
+  ```
+    thread 'main' panicked at src/ppu.rs:362:26:
+    attempt to write to CHR ROM: 0000 (read-only)
+  ```
 
 --
 
