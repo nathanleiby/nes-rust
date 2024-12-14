@@ -182,6 +182,7 @@ impl Ppu {
     //      instead of my (x,y) tile abstraction which is confusiong since it's x*8 for a bg tile
     //      or even x*8*2 when thinking of meta tiles..
     /// Returns a BGPaletteIdx, which can be used to look up a background palette
+    /// See: https://www.nesdev.org/wiki/PPU_attribute_tables
     fn palette_for_tile(&self, pos: (usize, usize)) -> BGPaletteIdx {
         let (x, y) = pos;
 
@@ -202,7 +203,7 @@ impl Ppu {
         let bank_end = bank_size * (bank + 1);
 
         let attr_table = &self.vram[bank_end - attr_table_size..bank_end];
-        let attr_table_idx = (y / 4) * 4 + (x / 4);
+        let attr_table_idx = (y / 4) * 8 + (x / 4);
         let attr_table_byte = attr_table[attr_table_idx];
 
         let meta_tile = (x % 4 < 2, y % 4 < 2);
@@ -676,7 +677,14 @@ mod tests {
             }
         }
 
-        ppu.vram[attr_table_start + 5] = 0b10101010;
+        ppu.vram[attr_table_start + 7] = 0b10101010;
+        for x in 28..=31 {
+            for y in 0..=3 {
+                assert_eq!(ppu.palette_for_tile((x, y)), BGPaletteIdx(2));
+            }
+        }
+
+        ppu.vram[attr_table_start + 9] = 0b10101010;
         for x in 4..=7 {
             for y in 4..=7 {
                 assert_eq!(ppu.palette_for_tile((x, y)), BGPaletteIdx(2));
