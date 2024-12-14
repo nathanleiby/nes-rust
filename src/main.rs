@@ -93,6 +93,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let bus = Bus::new_with_cb(rom, move |ppu| {
         ppu.draw_background(&mut frame);
+        ppu.draw_sprites(&mut frame);
 
         // redraw the screen
         texture.update(None, &frame.data, 256 * 3).unwrap();

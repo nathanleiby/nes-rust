@@ -34,7 +34,7 @@ impl Frame {
     // tile_n can be thought of as the offset in the pattern table  (CHR ROM)
     // pos (*8) relates to the value in the name table.
     /// VRAM (also called "name tables")
-    pub fn draw_tile(
+    pub fn draw_bg_tile(
         &mut self,
         chr_rom: &[u8],
         bank: usize,
@@ -78,6 +78,46 @@ impl Frame {
                 self.set_pixel((x * tile_size) + col, (y * tile_size) + row, color);
             }
         }
+    }
+
+    pub fn draw_sprite(&mut self, chr_rom: &[u8], sprite: &Sprite, palette: [u8; 4]) -> bool {
+        if sprite.behind_background {
+            return false;
+        }
+
+        let bank = if sprite.use_tile_bank_1 { 1 } else { 0 };
+        let tile_n = sprite.tile_idx as usize;
+        let x = sprite.x as usize;
+        let y = sprite.y as usize;
+
+        let tile_size_bytes = 16;
+        let bank_size_bytes: usize = 4096;
+        let tile_size = 8;
+
+        let mut drew_something = false;
+        for row in 0..tile_size {
+            let first_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + row;
+            let first_byte = chr_rom[first_byte_idx];
+            // let second_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + row + 8;
+            let second_byte = chr_rom[first_byte_idx + 8];
+
+            for col in 0..tile_size {
+                let which_bit = 1 << (7 - col);
+                let lo_bit = first_byte & which_bit > 0;
+                let hi_bit = second_byte & which_bit > 0;
+                let palette_idx: u8 = ((hi_bit as u8) << 1) + (lo_bit as u8);
+                assert!(palette_idx < 4);
+
+                // 0 means transparent, for sprites
+                if palette_idx > 0 {
+                    drew_something = true;
+                    let color = SYSTEM_PALETTE[palette[palette_idx as usize] as usize];
+                    self.set_pixel(x + col, y + row, color);
+                }
+            }
+        }
+
+        drew_something
     }
 }
 
@@ -141,10 +181,23 @@ pub struct Ppu {
     clock_cycles: usize,
 }
 
-#[derive(PartialEq, Eq, Debug)]
-/// There are 4 possible background palettes (0,1,2,3)
-/// These each map to a set of 4 indices, which are lookups in the ppu.palettes (Palette Table)
-struct BGPaletteIdx(usize);
+#[derive(PartialEq, Eq, Debug, Default, Copy, Clone)]
+/// There are 4 possible background palettes (0,1,2,3) and 4 possible sprite palettes (4,5,6,7).
+/// These 8 palettes each are made up of four numbers, which are indices into ppu.palettes (Palette Table)
+struct PaletteIdx(usize);
+
+#[derive(Default, Debug, PartialEq, Eq)]
+pub struct Sprite {
+    x: u8,
+    y: u8,
+    use_tile_bank_1: bool,
+    tile_idx: u8,
+    is_8_by_16: bool,
+    palette_idx: PaletteIdx,
+    behind_background: bool,
+    flip_horizontal: bool,
+    flip_vertical: bool,
+}
 
 impl Ppu {
     pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
@@ -164,17 +217,17 @@ impl Ppu {
         }
     }
 
-    fn palette_from_bg_palette_idx(&self, bgp_idx: BGPaletteIdx) -> [u8; 4] {
-        let palette_idx = bgp_idx.0;
-        assert!(palette_idx < 4);
-        let start = (palette_idx * 4 + 1) as usize;
+    fn palette_from_palette_idx(&self, palette_idx: PaletteIdx, is_background: bool) -> [u8; 4] {
+        let p_idx = palette_idx.0;
+        assert!(p_idx < 8);
 
-        // The first entry is a special case for background
+        let start = (p_idx * 4) as usize;
         [
-            self.palettes[0],
-            self.palettes[start],
+            // The first entry is a special case
+            if is_background { self.palettes[0] } else { 0 },
             self.palettes[start + 1],
             self.palettes[start + 2],
+            self.palettes[start + 3],
         ]
     }
 
@@ -183,7 +236,7 @@ impl Ppu {
     //      or even x*8*2 when thinking of meta tiles..
     /// Returns a BGPaletteIdx, which can be used to look up a background palette
     /// See: https://www.nesdev.org/wiki/PPU_attribute_tables
-    fn palette_for_tile(&self, pos: (usize, usize)) -> BGPaletteIdx {
+    fn palette_for_bg_tile(&self, pos: (usize, usize)) -> PaletteIdx {
         let (x, y) = pos;
 
         // For background tiles, the last 64 bytes of each nametable are reserved
@@ -198,11 +251,12 @@ impl Ppu {
         } else {
             0
         };
-        let bank_size = 1024;
-        let attr_table_size = 64;
-        let bank_end = bank_size * (bank + 1);
 
-        let attr_table = &self.vram[bank_end - attr_table_size..bank_end];
+        let nametable_size = 1024;
+        let attr_table_size = 64;
+        let nt_end = nametable_size * (bank + 1);
+
+        let attr_table = &self.vram[nt_end - attr_table_size..nt_end];
         let attr_table_idx = (y / 4) * 8 + (x / 4);
         let attr_table_byte = attr_table[attr_table_idx];
 
@@ -217,7 +271,7 @@ impl Ppu {
         let palette_idx = ((attr_table_byte >> shift) & 0b11) as usize;
         assert!(palette_idx < 4);
 
-        BGPaletteIdx(palette_idx)
+        PaletteIdx(palette_idx)
     }
 
     // tile_n can be thought of as the offset in the pattern table  (CHR ROM)
@@ -231,8 +285,9 @@ impl Ppu {
             .intersection(ControlRegister::NAMETABLE)
             .bits() as usize;
         assert!(which_nametable <= 3);
+        // TODO: which_nametable isn't being used.. this likely relates to scrolling+mirroring
 
-        // Determine which CHR ROM bank is used for background tiles (by reading bit 4 from Control Register)
+        // Determine which CHR ROM bank (Pattern Table) is used for background tiles (by reading bit 4 from Control Register)
         let bank = (self
             .registers
             .control
@@ -246,10 +301,81 @@ impl Ppu {
         for y in 0..rows {
             for x in 0..cols {
                 let tile_n = self.vram[y * cols + x] as usize;
-                let bgp_idx = self.palette_for_tile((x, y));
-                let palette = self.palette_from_bg_palette_idx(bgp_idx);
-                frame.draw_tile(&self.chr_rom, bank, tile_n, (x, y), palette);
+                let bgp_idx = self.palette_for_bg_tile((x, y));
+                let palette = self.palette_from_palette_idx(bgp_idx, true);
+                frame.draw_bg_tile(&self.chr_rom, bank, tile_n, (x, y), palette);
             }
+        }
+    }
+
+    pub fn draw_sprites(&self, frame: &mut Frame) {
+        // Priority between sprites is determined by their address inside OAM.
+        // .. the sprite data that occurs first will overlap any other sprites after it..
+        // So let's draw things in reverse to handle that
+        for b in self.oam_data.chunks(4).rev() {
+            let sprite = self.parse_sprite_from_oam_data(b);
+            let palette = self.palette_from_palette_idx(sprite.palette_idx, false);
+            let _ = frame.draw_sprite(&self.chr_rom, &sprite, palette);
+            // if visible && palette.iter().any(|x| *x != 0) {
+            //     println!("palette: {:?}", palette);
+            //     println!("Drew Sprite: {:?}", sprite);
+            // }
+        }
+    }
+
+    fn parse_sprite_from_oam_data(&self, b: &[u8]) -> Sprite {
+        assert!(b.len() == 4);
+
+        // parse sprite (4 bytes)
+        let y = b[0];
+
+        let tile_data = b[1];
+        // this is a number 0 or 1, and maps to 0x0000 or 0x1000 within pattern table (chr rom)
+        let (tile_bank, tile_idx, is_8_by_16) = if self
+            .registers
+            .control
+            .contains(ControlRegister::SPRITE_SIZE)
+        {
+            // For 8x16 sprites (bit 5 of PPUCTRL set), the PPU ignores the pattern table selection and selects a pattern table from bit 0 of this number.
+            let tile_bank = tile_data & 0b1;
+            let tile_idx = tile_data & 0b1111_1110;
+
+            (tile_bank, tile_idx, true)
+        } else {
+            // For 8x8 sprites, this is the tile number of this sprite within the pattern table selected in bit 3 of PPUCTRL ($2000).
+            let tile_bank = if self
+                .registers
+                .control
+                .contains(ControlRegister::SPRITE_PATTERN_ADDR)
+            {
+                1
+            } else {
+                0
+            };
+
+            (tile_bank, tile_data, false)
+        };
+
+        let attributes = b[2];
+        let palette_idx = PaletteIdx((attributes & 0b11) as usize + 4);
+        let foreground_priority = attributes & (1 << 5) > 0;
+        let flip_horizontal = attributes & (1 << 6) > 0;
+        let flip_vertical = attributes & (1 << 7) > 0;
+
+        // let sprite_data = self.chr_rom[tile_bank as usize * 1024 + tile_idx];
+
+        let x = b[3];
+
+        Sprite {
+            x,
+            y,
+            use_tile_bank_1: tile_bank == 1,
+            tile_idx,
+            is_8_by_16,
+            palette_idx,
+            behind_background: foreground_priority,
+            flip_horizontal,
+            flip_vertical,
         }
     }
 
@@ -268,9 +394,10 @@ impl Ppu {
             // The VBlank flag of the PPU is set at tick 1 (the second tick) of scanline 241
             // Here we are approximating that by clearing on dot 0 or above.
             self.set_ppu_vblank_status(true);
-            self.registers
-                .status
-                .remove(StatusRegister::SPRITE_0_HIT_FLAG);
+            // TODO
+            // self.registers
+            //     .status
+            //     .remove(StatusRegister::SPRITE_0_HIT_FLAG);
             should_rerender = true
         }
 
@@ -280,9 +407,10 @@ impl Ppu {
             // Here we are approximating that by clearing on dot 0 or above.
             self.set_ppu_vblank_status(false);
             self.nmi_interrupt = None;
-            self.registers
-                .status
-                .remove(StatusRegister::SPRITE_0_HIT_FLAG);
+            // TODO
+            // self.registers
+            //     .status
+            //     .remove(StatusRegister::SPRITE_0_HIT_FLAG);
         }
 
         self.clock_cycles %= 262 * 341;
@@ -643,51 +771,51 @@ mod tests {
         let attr_table_start = 1024 - 64;
         ppu.vram[attr_table_start] = 0b00011011;
 
-        assert_eq!(ppu.palette_for_tile((0, 0)), BGPaletteIdx(3));
-        assert_eq!(ppu.palette_for_tile((1, 0)), BGPaletteIdx(3));
-        assert_eq!(ppu.palette_for_tile((0, 1)), BGPaletteIdx(3));
-        assert_eq!(ppu.palette_for_tile((1, 1)), BGPaletteIdx(3));
+        assert_eq!(ppu.palette_for_bg_tile((0, 0)), PaletteIdx(3));
+        assert_eq!(ppu.palette_for_bg_tile((1, 0)), PaletteIdx(3));
+        assert_eq!(ppu.palette_for_bg_tile((0, 1)), PaletteIdx(3));
+        assert_eq!(ppu.palette_for_bg_tile((1, 1)), PaletteIdx(3));
 
-        assert_eq!(ppu.palette_for_tile((2, 0)), BGPaletteIdx(2));
-        assert_eq!(ppu.palette_for_tile((3, 0)), BGPaletteIdx(2));
-        assert_eq!(ppu.palette_for_tile((2, 1)), BGPaletteIdx(2));
-        assert_eq!(ppu.palette_for_tile((3, 1)), BGPaletteIdx(2));
+        assert_eq!(ppu.palette_for_bg_tile((2, 0)), PaletteIdx(2));
+        assert_eq!(ppu.palette_for_bg_tile((3, 0)), PaletteIdx(2));
+        assert_eq!(ppu.palette_for_bg_tile((2, 1)), PaletteIdx(2));
+        assert_eq!(ppu.palette_for_bg_tile((3, 1)), PaletteIdx(2));
 
-        assert_eq!(ppu.palette_for_tile((0, 2)), BGPaletteIdx(1));
-        assert_eq!(ppu.palette_for_tile((1, 3)), BGPaletteIdx(1));
-        assert_eq!(ppu.palette_for_tile((0, 2)), BGPaletteIdx(1));
-        assert_eq!(ppu.palette_for_tile((1, 3)), BGPaletteIdx(1));
+        assert_eq!(ppu.palette_for_bg_tile((0, 2)), PaletteIdx(1));
+        assert_eq!(ppu.palette_for_bg_tile((1, 3)), PaletteIdx(1));
+        assert_eq!(ppu.palette_for_bg_tile((0, 2)), PaletteIdx(1));
+        assert_eq!(ppu.palette_for_bg_tile((1, 3)), PaletteIdx(1));
 
-        assert_eq!(ppu.palette_for_tile((2, 2)), BGPaletteIdx(0));
-        assert_eq!(ppu.palette_for_tile((3, 3)), BGPaletteIdx(0));
-        assert_eq!(ppu.palette_for_tile((2, 2)), BGPaletteIdx(0));
-        assert_eq!(ppu.palette_for_tile((3, 3)), BGPaletteIdx(0));
+        assert_eq!(ppu.palette_for_bg_tile((2, 2)), PaletteIdx(0));
+        assert_eq!(ppu.palette_for_bg_tile((3, 3)), PaletteIdx(0));
+        assert_eq!(ppu.palette_for_bg_tile((2, 2)), PaletteIdx(0));
+        assert_eq!(ppu.palette_for_bg_tile((3, 3)), PaletteIdx(0));
 
         ppu.vram[attr_table_start + 1] = 0b11111111;
         for x in 4..=7 {
             for y in 0..=3 {
-                assert_eq!(ppu.palette_for_tile((x, y)), BGPaletteIdx(3));
+                assert_eq!(ppu.palette_for_bg_tile((x, y)), PaletteIdx(3));
             }
         }
 
         ppu.vram[attr_table_start + 2] = 0b01010101;
         for x in 8..=11 {
             for y in 0..=3 {
-                assert_eq!(ppu.palette_for_tile((x, y)), BGPaletteIdx(1));
+                assert_eq!(ppu.palette_for_bg_tile((x, y)), PaletteIdx(1));
             }
         }
 
         ppu.vram[attr_table_start + 7] = 0b10101010;
         for x in 28..=31 {
             for y in 0..=3 {
-                assert_eq!(ppu.palette_for_tile((x, y)), BGPaletteIdx(2));
+                assert_eq!(ppu.palette_for_bg_tile((x, y)), PaletteIdx(2));
             }
         }
 
         ppu.vram[attr_table_start + 9] = 0b10101010;
         for x in 4..=7 {
             for y in 4..=7 {
-                assert_eq!(ppu.palette_for_tile((x, y)), BGPaletteIdx(2));
+                assert_eq!(ppu.palette_for_bg_tile((x, y)), PaletteIdx(2));
             }
         }
     }
@@ -697,26 +825,74 @@ mod tests {
         let mut ppu = new_test_ppu();
 
         ppu.palettes[0] = 255;
-        ppu.palettes[1..=3].copy_from_slice(&[1, 2, 3]); // bg_pallete idx=0
-        ppu.palettes[5..=7].copy_from_slice(&[5, 6, 7]); // bg_pallete idx=1
-        ppu.palettes[9..=11].copy_from_slice(&[9, 10, 11]); // bg_pallete idx=2
-        ppu.palettes[13..=15].copy_from_slice(&[13, 14, 15]); // bg_pallete idx=3
+        ppu.palettes[1..32].copy_from_slice(Vec::from_iter(1..32).as_slice());
 
         assert_eq!(
-            ppu.palette_from_bg_palette_idx(BGPaletteIdx(0)),
+            ppu.palette_from_palette_idx(PaletteIdx(0), true),
             [255, 1, 2, 3]
         );
         assert_eq!(
-            ppu.palette_from_bg_palette_idx(BGPaletteIdx(1)),
+            ppu.palette_from_palette_idx(PaletteIdx(1), true),
             [255, 5, 6, 7]
         );
         assert_eq!(
-            ppu.palette_from_bg_palette_idx(BGPaletteIdx(2)),
+            ppu.palette_from_palette_idx(PaletteIdx(2), true),
             [255, 9, 10, 11]
         );
         assert_eq!(
-            ppu.palette_from_bg_palette_idx(BGPaletteIdx(3)),
+            ppu.palette_from_palette_idx(PaletteIdx(3), true),
             [255, 13, 14, 15]
+        );
+
+        // sprite palette
+        assert_eq!(
+            ppu.palette_from_palette_idx(PaletteIdx(4), false),
+            [0, 17, 18, 19]
+        );
+
+        assert_eq!(
+            ppu.palette_from_palette_idx(PaletteIdx(5), false),
+            [0, 21, 22, 23]
+        );
+    }
+
+    #[test]
+    fn test_parse_sprite_from_oam_data() {
+        let mut ppu = new_test_ppu();
+
+        let mut expected = Sprite::default();
+        expected.palette_idx = PaletteIdx(4);
+        assert_eq!(ppu.parse_sprite_from_oam_data(&[0, 0, 0, 0]), expected);
+
+        ppu.registers
+            .control
+            .insert(ControlRegister::SPRITE_PATTERN_ADDR);
+        let mut expected = Sprite::default();
+        expected.x = 5;
+        expected.y = 10;
+        expected.tile_idx = 123;
+        expected.palette_idx = PaletteIdx(6);
+        expected.flip_horizontal = true;
+        expected.flip_vertical = true;
+        expected.behind_background = true;
+        expected.use_tile_bank_1 = true;
+        assert_eq!(
+            ppu.parse_sprite_from_oam_data(&[10, 123, 0b1110_0010, 5]),
+            expected
+        );
+
+        ppu.registers.control.insert(ControlRegister::SPRITE_SIZE);
+        let mut expected = Sprite::default();
+        expected.x = 1;
+        expected.y = 2;
+        expected.tile_idx = 16;
+        expected.palette_idx = PaletteIdx(7);
+        expected.flip_vertical = true;
+        expected.behind_background = true;
+        expected.is_8_by_16 = true;
+        assert_eq!(
+            ppu.parse_sprite_from_oam_data(&[2, 0b0001_0000, 0b1010_0011, 1]),
+            expected
         );
     }
 }
