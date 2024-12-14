@@ -100,10 +100,11 @@ impl Ppu {
         }
     }
 
-    fn palette_from_palette_idx(&self, palette_idx: PaletteIdx, is_background: bool) -> [u8; 4] {
+    fn palette_from_palette_idx(&self, palette_idx: PaletteIdx) -> [u8; 4] {
         let p_idx = palette_idx.0;
         assert!(p_idx < 8);
 
+        let is_background = p_idx < 4;
         let start = p_idx * 4;
         [
             // The first entry is a special case
@@ -189,7 +190,7 @@ impl Ppu {
             for x in 0..cols {
                 let tile_n = self.vram[y * cols + x] as usize;
                 let bgp_idx = self.palette_for_bg_tile((x, y));
-                let palette = self.palette_from_palette_idx(bgp_idx, true);
+                let palette = self.palette_from_palette_idx(bgp_idx);
                 frame.draw_bg_tile(&self.chr_rom, bank, tile_n, (x, y), palette);
             }
         }
@@ -201,7 +202,7 @@ impl Ppu {
         // So let's draw things in reverse to handle that
         for b in self.oam_data.chunks(4).rev() {
             let sprite = self.parse_sprite_from_oam_data(b);
-            let palette = self.palette_from_palette_idx(sprite.palette_idx, false);
+            let palette = self.palette_from_palette_idx(sprite.palette_idx);
             let _ = frame.draw_sprite(&self.chr_rom, &sprite, palette);
             // if visible && palette.iter().any(|x| *x != 0) {
             //     println!("palette: {:?}", palette);
@@ -711,33 +712,21 @@ mod tests {
         ppu.palettes[0] = 255;
         ppu.palettes[1..32].copy_from_slice(Vec::from_iter(1..32).as_slice());
 
+        assert_eq!(ppu.palette_from_palette_idx(PaletteIdx(0)), [255, 1, 2, 3]);
+        assert_eq!(ppu.palette_from_palette_idx(PaletteIdx(1)), [255, 5, 6, 7]);
         assert_eq!(
-            ppu.palette_from_palette_idx(PaletteIdx(0), true),
-            [255, 1, 2, 3]
-        );
-        assert_eq!(
-            ppu.palette_from_palette_idx(PaletteIdx(1), true),
-            [255, 5, 6, 7]
-        );
-        assert_eq!(
-            ppu.palette_from_palette_idx(PaletteIdx(2), true),
+            ppu.palette_from_palette_idx(PaletteIdx(2)),
             [255, 9, 10, 11]
         );
         assert_eq!(
-            ppu.palette_from_palette_idx(PaletteIdx(3), true),
+            ppu.palette_from_palette_idx(PaletteIdx(3)),
             [255, 13, 14, 15]
         );
 
         // sprite palette
-        assert_eq!(
-            ppu.palette_from_palette_idx(PaletteIdx(4), false),
-            [0, 17, 18, 19]
-        );
+        assert_eq!(ppu.palette_from_palette_idx(PaletteIdx(4)), [0, 17, 18, 19]);
 
-        assert_eq!(
-            ppu.palette_from_palette_idx(PaletteIdx(5), false),
-            [0, 21, 22, 23]
-        );
+        assert_eq!(ppu.palette_from_palette_idx(PaletteIdx(5)), [0, 21, 22, 23]);
     }
 
     #[test]
