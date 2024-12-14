@@ -428,7 +428,7 @@ impl Ppu {
 
     pub fn write_to_oam_data(&mut self, data: u8) {
         self.oam_data[self.registers.oam_address as usize] = data;
-        self.registers.oam_address += 1;
+        _ = self.registers.oam_address.wrapping_add(1);
     }
 
     pub fn read_from_oam_data(&mut self) -> u8 {

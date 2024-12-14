@@ -124,17 +124,22 @@ impl Mem for Bus<'_> {
             }
         } else if addr == 0x4014 {
             // 2.9	OAMDMA - Sprite DMA ($4014 write)
-            self.ppu.write_to_oam_data(data);
+            // https://www.nesdev.org/wiki/PPU_programmer_reference#OAMDMA
+
+            // data is treated as hi-byte of an addr
+            let hi = (data as u16) << 8;
+
+            // do 256 writes
+            for i in 0..256 {
+                let data_to_copy = self.mem_read(hi + i);
+                self.ppu.write_to_oam_data(data_to_copy);
+            }
+
+            // TODO: Eventually figure out what CPU cycles need to be added for OAM DMA write
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
             panic!("attempt to write to ROM cartridge")
         } else if [0x4000, 0x4001, 0x4002, 0x4003, 0x4004, 0x4015, 0x4017].contains(&addr) {
-            // } else if [0x4000, 0x4001, 0x4002, 0x4003, 0x4004, 0x4015, 0x4017].contains(&addr) {
         } else if (0x4000..=0x4013).contains(&addr) || addr == 0x4015 {
-            // todo!(
-            //     "attempt to write to addr=0x{:04X}. This will be the APU, later!",
-            //     addr
-            // )
-            // TODO
         } else if addr == 0x4016 {
             self.gamepad1.write(data);
         } else if addr == 0x4017 {
