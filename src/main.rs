@@ -1,6 +1,5 @@
 use core::Cpu;
 use core::Mem;
-use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -18,7 +17,6 @@ mod rom;
 mod utility;
 
 use bus::Bus;
-use gamepad::GamepadButtons;
 use ppu::Frame;
 use rand::random;
 use rom::Rom;
@@ -26,25 +24,25 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;
 
-struct KeyboardInput {
-    key_map: HashMap<Keycode, GamepadButtons>,
-}
+// struct KeyboardInput {
+//     key_map: HashMap<Keycode, GamepadButtons>,
+// }
 
-impl KeyboardInput {
-    pub fn new() -> Self {
-        let mut key_map = HashMap::new();
-        key_map.insert(Keycode::Down, gamepad::GamepadButtons::Down);
-        key_map.insert(Keycode::Up, gamepad::GamepadButtons::Up);
-        key_map.insert(Keycode::Right, gamepad::GamepadButtons::Right);
-        key_map.insert(Keycode::Left, gamepad::GamepadButtons::Left);
-        key_map.insert(Keycode::Space, gamepad::GamepadButtons::Select);
-        key_map.insert(Keycode::Return, gamepad::GamepadButtons::Start);
-        key_map.insert(Keycode::A, gamepad::GamepadButtons::ButtonA);
-        key_map.insert(Keycode::S, gamepad::GamepadButtons::ButtonB);
+// impl KeyboardInput {
+//     pub fn new() -> Self {
+//         let mut key_map = HashMap::new();
+//         key_map.insert(Keycode::Down, gamepad::GamepadButtons::Down);
+//         key_map.insert(Keycode::Up, gamepad::GamepadButtons::Up);
+//         key_map.insert(Keycode::Right, gamepad::GamepadButtons::Right);
+//         key_map.insert(Keycode::Left, gamepad::GamepadButtons::Left);
+//         key_map.insert(Keycode::Space, gamepad::GamepadButtons::Select);
+//         key_map.insert(Keycode::Return, gamepad::GamepadButtons::Start);
+//         key_map.insert(Keycode::A, gamepad::GamepadButtons::ButtonA);
+//         key_map.insert(Keycode::S, gamepad::GamepadButtons::ButtonB);
 
-        Self { key_map }
-    }
-}
+//         Self { key_map }
+//     }
+// }
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();

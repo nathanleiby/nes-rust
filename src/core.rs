@@ -253,6 +253,8 @@ impl<'a, 'b: 'a> Cpu<'a> {
     // MAIN
     //
 
+    // TODO: This is used in a test right now
+    #[allow(dead_code)]
     pub fn load_rom(&mut self, rom: Rom) {
         self.set_bus(Bus::new(rom));
     }
@@ -1126,7 +1128,7 @@ mod tests {
     #[test]
     fn test_0xa0_lda_immediate_nonzero() {
         let mut cpu = Cpu::new();
-        cpu.load_rom(Rom::new_test_rom(vec![0xa9, 0x55, 0x00]));
+        cpu._load_test_rom(vec![0xa9, 0x55, 0x00]);
         cpu.reset();
         cpu._run();
         assert_eq!(cpu.a, 0x55);

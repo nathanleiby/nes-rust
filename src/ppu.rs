@@ -1,10 +1,6 @@
 use bitflags::bitflags;
 
-use crate::{
-    addr_register::AddrRegister,
-    palette::{SYSTEM_PALETTE},
-    rom::Mirroring,
-};
+use crate::{addr_register::AddrRegister, palette::SYSTEM_PALETTE, rom::Mirroring};
 
 // TODO: move UI rendering stuff that ties to SDL2 out of PPU
 pub struct Frame {
@@ -32,7 +28,6 @@ impl Frame {
 
     // tile_n can be thought of as the offset in the pattern table  (CHR ROM)
     // pos (*8) relates to the value in the name table.
-    /// VRAM (also called "name tables")
     pub fn draw_bg_tile(
         &mut self,
         chr_rom: &[u8],
@@ -145,8 +140,8 @@ pub struct PpuRegisters {
 pub struct Ppu {
     /// CHR ROM (also called "pattern tables")
     chr_rom: Vec<u8>,
-    /// VRAM (also called "name tables")
 
+    /// VRAM (also called "name tables")
     /// 1024 bytes make up a single "Frame"
     /// The PPU has 2048 bytes here, representing 2 frames.
     /// NOTE: the PPU is addressable via 4096 bytes, meaning there's some remapping of those additional bytes.
@@ -220,7 +215,7 @@ impl Ppu {
         let p_idx = palette_idx.0;
         assert!(p_idx < 8);
 
-        let start = (p_idx * 4);
+        let start = p_idx * 4;
         [
             // The first entry is a special case
             if is_background { self.palettes[0] } else { 0 },
@@ -275,7 +270,6 @@ impl Ppu {
 
     // tile_n can be thought of as the offset in the pattern table  (CHR ROM)
     // pos (*8) relates to the value in the name table.
-    /// VRAM (also called "name tables")
     pub fn draw_background(&self, frame: &mut Frame) {
         // Determine which nametable is being used for the current screen (by reading bit 0 and bit 1 from Control register)
         let which_nametable = self
@@ -506,7 +500,7 @@ impl Ppu {
         let name_table_idx = base / 0x0400;
 
         // and ROM-configured mirroring
-        
+
         match (self.mirroring, name_table_idx) {
             (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 2) => base - 0x0400,
             (Mirroring::Vertical, 2) | (Mirroring::Vertical, 3) | (Mirroring::Horizontal, 3) => {
@@ -692,9 +686,7 @@ mod tests {
 
         assert_eq!(ppu.get_tick_status(), (0, 0));
         assert_eq!(ppu.nmi_interrupt, None);
-        assert!(
-            !ppu.registers.status.contains(StatusRegister::VBLANK_FLAG),
-        );
+        assert!(!ppu.registers.status.contains(StatusRegister::VBLANK_FLAG),);
         assert!(!ppu.is_vblank_nmi_enabled());
 
         ppu.registers
@@ -858,36 +850,42 @@ mod tests {
     fn test_parse_sprite_from_oam_data() {
         let mut ppu = new_test_ppu();
 
-        let mut expected = Sprite::default();
-        expected.palette_idx = PaletteIdx(4);
+        let expected = Sprite {
+            palette_idx: PaletteIdx(4),
+            ..Default::default()
+        };
         assert_eq!(ppu.parse_sprite_from_oam_data(&[0, 0, 0, 0]), expected);
 
         ppu.registers
             .control
             .insert(ControlRegister::SPRITE_PATTERN_ADDR);
-        let mut expected = Sprite::default();
-        expected.x = 5;
-        expected.y = 10;
-        expected.tile_idx = 123;
-        expected.palette_idx = PaletteIdx(6);
-        expected.flip_horizontal = true;
-        expected.flip_vertical = true;
-        expected.behind_background = true;
-        expected.use_tile_bank_1 = true;
+        let expected = Sprite {
+            x: 5,
+            y: 10,
+            tile_idx: 123,
+            palette_idx: PaletteIdx(6),
+            flip_horizontal: true,
+            flip_vertical: true,
+            behind_background: true,
+            use_tile_bank_1: true,
+            ..Default::default()
+        };
         assert_eq!(
             ppu.parse_sprite_from_oam_data(&[10, 123, 0b1110_0010, 5]),
             expected
         );
 
         ppu.registers.control.insert(ControlRegister::SPRITE_SIZE);
-        let mut expected = Sprite::default();
-        expected.x = 1;
-        expected.y = 2;
-        expected.tile_idx = 16;
-        expected.palette_idx = PaletteIdx(7);
-        expected.flip_vertical = true;
-        expected.behind_background = true;
-        expected.is_8_by_16 = true;
+        let expected = Sprite {
+            x: 1,
+            y: 2,
+            tile_idx: 16,
+            palette_idx: PaletteIdx(7),
+            flip_vertical: true,
+            behind_background: true,
+            is_8_by_16: true,
+            ..Default::default()
+        };
         assert_eq!(
             ppu.parse_sprite_from_oam_data(&[2, 0b0001_0000, 0b1010_0011, 1]),
             expected
