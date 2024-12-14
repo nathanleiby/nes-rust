@@ -74,79 +74,79 @@ impl<'a> Bus<'a> {
 
 impl Mem for Bus<'_> {
     fn mem_read(&mut self, addr: u16) -> u8 {
-        if (RAM..RAM_MIRROR_END).contains(&addr) {
-            let a = addr & 0b1110_0111_1111_1111;
-            self.cpu_vram[a as usize]
-        } else if (PPU..PPU_MIRROR_END).contains(&addr) {
-            // The PPU exposes 8 registers. They are mirrored every 8 bytes in this range.
-            let register_idx = addr % 8;
-            match register_idx {
-                // 0 | 1 | 3 | 5 | 6 => panic!(
-                //     "attempt to read from write-only PPU register: 0x200{}",
-                //     register_idx
-                // ),
-                0 | 1 | 3 | 5 | 6 => 0, // TODO
-                2 => self.ppu.read_from_status(),
-                4 => self.ppu.read_from_oam_data(),
-                7 => self.ppu.read_from_data(),
-                8..=u16::MAX => panic!("invalid PPU register IDX: {}", register_idx),
+        match addr {
+            RAM..RAM_MIRROR_END => {
+                let a = addr & 0b1110_0111_1111_1111;
+                self.cpu_vram[a as usize]
             }
-        } else if addr == 0x4014 {
-            panic!("attempt to read from write-only PPU register: 0x4014 (OAMDMA - Sprite DMA)");
-        } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
-            self.read_prg_rom(addr)
-        } else if addr == 0x4016 {
-            self.gamepad1.read()
-        } else if addr == 0x4017 {
-            self.gamepad2.read()
-        } else {
-            0
+            PPU..PPU_MIRROR_END => {
+                // The PPU exposes 8 registers. They are mirrored every 8 bytes in this range.
+                let register_idx = addr % 8;
+                match register_idx {
+                    0 | 1 | 3 | 5 | 6 => panic!(
+                        "attempt to read from write-only PPU register: 0x200{}",
+                        register_idx
+                    ),
+                    // 0 | 1 | 3 | 5 | 6 => 0, // TODO
+                    2 => self.ppu.read_from_status(),
+                    4 => self.ppu.read_from_oam_data(),
+                    7 => self.ppu.read_from_data(),
+                    8..=u16::MAX => panic!("invalid PPU register IDX: {}", register_idx),
+                }
+            }
+            0x4014 => {
+                panic!("attempt to read from write-only PPU register: 0x4014 (OAMDMA - Sprite DMA)")
+            }
+            0x4016 => self.gamepad1.read(),
+            0x4017 => self.gamepad2.read(),
+            PRG_ROM_START..=PRG_ROM_END => self.read_prg_rom(addr),
+            _ => 0,
         }
     }
 
     fn mem_write(&mut self, addr: u16, data: u8) {
-        if (RAM..RAM_MIRROR_END).contains(&addr) {
-            let a = addr & 0b1110_0111_1111_1111;
-            self.cpu_vram[a as usize] = data
-        } else if (PPU..PPU_MIRROR_END).contains(&addr) {
-            // The PPU exposes 8 registers. They are mirrored every 8 bytes in this range.
-            let register_idx = addr % 8;
-            match register_idx {
-                0 => self.ppu.write_to_ctrl(data),
-                1 => self.ppu.write_to_mask(data),
-                2 => panic!("attempt to write to read-only PPU register: 0x2002 (Status)",),
-                3 => self.ppu.write_to_oam_address(data),
-                4 => self.ppu.write_to_oam_data(data),
-                5 => self.ppu.write_to_scroll_register(data),
-                6 => self.ppu.write_to_addr(data),
-                7 => self.ppu.write_to_data(data),
-                8..=u16::MAX => panic!("invalid PPU register IDX: {}", register_idx),
+        match addr {
+            RAM..RAM_MIRROR_END => {
+                let a = addr & 0b1110_0111_1111_1111;
+                self.cpu_vram[a as usize] = data;
             }
-        } else if addr == 0x4014 {
-            // 2.9	OAMDMA - Sprite DMA ($4014 write)
-            // https://www.nesdev.org/wiki/PPU_programmer_reference#OAMDMA
-
-            // data is treated as hi-byte of an addr
-            let hi = (data as u16) << 8;
-
-            // do 256 writes
-            for i in 0..256 {
-                let data_to_copy = self.mem_read(hi + i);
-                self.ppu.write_to_oam_data(data_to_copy);
+            PPU..PPU_MIRROR_END => {
+                // The PPU exposes 8 registers. They are mirrored every 8 bytes in this range.
+                let register_idx = addr % 8;
+                match register_idx {
+                    0 => self.ppu.write_to_ctrl(data),
+                    1 => self.ppu.write_to_mask(data),
+                    2 => panic!("attempt to write to read-only PPU register: 0x2002 (Status)",),
+                    3 => self.ppu.write_to_oam_address(data),
+                    4 => self.ppu.write_to_oam_data(data),
+                    5 => self.ppu.write_to_scroll_register(data),
+                    6 => self.ppu.write_to_addr(data),
+                    7 => self.ppu.write_to_data(data),
+                    8..=u16::MAX => panic!("invalid PPU register IDX: {}", register_idx),
+                }
             }
+            0x4014 => {
+                // 2.9	OAMDMA - Sprite DMA ($4014 write)
+                // https://www.nesdev.org/wiki/PPU_programmer_reference#OAMDMA
 
-            // TODO: Eventually figure out what CPU cycles need to be added for OAM DMA write
-        } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
-            panic!("attempt to write to ROM cartridge")
-        } else if [0x4000, 0x4001, 0x4002, 0x4003, 0x4004, 0x4015, 0x4017].contains(&addr) {
-        } else if (0x4000..=0x4013).contains(&addr) || addr == 0x4015 {
-        } else if addr == 0x4016 {
-            self.gamepad1.write(data);
-        } else if addr == 0x4017 {
-            self.gamepad2.write(data);
-        } else {
-            todo!("attempt to write to memory addr=0x{:04X}", addr)
-        };
+                // data is treated as hi-byte of an addr
+                let hi = (data as u16) << 8;
+
+                // do 256 writes
+                for i in 0..256 {
+                    let data_to_copy = self.mem_read(hi + i);
+                    self.ppu.write_to_oam_data(data_to_copy);
+                }
+
+                // TODO: Eventually figure out what CPU cycles need to be added for OAM DMA write
+            }
+            0x4000..=0x4013 | 0x4015 => (), // TODO: implement APU,
+            0x4016 => self.gamepad1.write(data),
+            0x4017 => self.gamepad2.write(data),
+            0x4018..0x4020 => (), // APU and I/O functionality that is normally disabled
+            0x4020..0x8000 => (), // available for cartridge use
+            PRG_ROM_START..=PRG_ROM_END => panic!("invalid write to ROM cartridge: {:04X}", addr),
+        }
     }
 }
 
