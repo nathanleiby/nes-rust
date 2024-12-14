@@ -2,9 +2,8 @@ use bitflags::bitflags;
 
 use crate::{
     addr_register::AddrRegister,
-    palette::{self, SYSTEM_PALETTE},
+    palette::{SYSTEM_PALETTE},
     rom::Mirroring,
-    utility::{addr_from, split_addr},
 };
 
 // TODO: move UI rendering stuff that ties to SDL2 out of PPU
@@ -221,7 +220,7 @@ impl Ppu {
         let p_idx = palette_idx.0;
         assert!(p_idx < 8);
 
-        let start = (p_idx * 4) as usize;
+        let start = (p_idx * 4);
         [
             // The first entry is a special case
             if is_background { self.palettes[0] } else { 0 },
@@ -507,7 +506,8 @@ impl Ppu {
         let name_table_idx = base / 0x0400;
 
         // and ROM-configured mirroring
-        let mirrored = match (self.mirroring, name_table_idx) {
+        
+        match (self.mirroring, name_table_idx) {
             (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 2) => base - 0x0400,
             (Mirroring::Vertical, 2) | (Mirroring::Vertical, 3) | (Mirroring::Horizontal, 3) => {
                 base - 0x0800
@@ -516,8 +516,7 @@ impl Ppu {
             (Mirroring::FourScreen, _) => {
                 todo!("Four Screen requires specicial setup with more RAM. More info: https://www.nesdev.org/wiki/Mirroring#4-Screen")
             }
-        };
-        mirrored
+        }
     }
 
     pub fn write_to_data(&mut self, data: u8) {
@@ -693,20 +692,19 @@ mod tests {
 
         assert_eq!(ppu.get_tick_status(), (0, 0));
         assert_eq!(ppu.nmi_interrupt, None);
-        assert_eq!(
-            ppu.registers.status.contains(StatusRegister::VBLANK_FLAG),
-            false,
+        assert!(
+            !ppu.registers.status.contains(StatusRegister::VBLANK_FLAG),
         );
-        assert_eq!(ppu.is_vblank_nmi_enabled(), false);
+        assert!(!ppu.is_vblank_nmi_enabled());
 
         ppu.registers
             .control
             .insert(ControlRegister::VBLANK_NMI_ENABLE);
-        assert_eq!(ppu.is_vblank_nmi_enabled(), true);
+        assert!(ppu.is_vblank_nmi_enabled());
 
-        ppu.tick(1 * 341);
+        ppu.tick(341);
         assert_eq!(ppu.get_tick_status(), (1, 341));
-        assert_eq!(get_ppu_vblank_status(&mut ppu), false);
+        assert!(!get_ppu_vblank_status(&mut ppu));
 
         let should_rerender = ppu.tick(240 * 341);
         assert_eq!(ppu.get_tick_status(), (241, 241 * 341));
