@@ -2,8 +2,6 @@ use bitflags::bitflags;
 
 use crate::{addr_register::AddrRegister, render::Frame, rom::Mirroring};
 
-// TODO: move UI rendering stuff that ties to SDL2 out of PPU
-
 #[derive(Default)]
 pub struct PpuRegisters {
     /// Controller (0x2000) - instructs PPU on general logic flow
@@ -26,6 +24,8 @@ pub struct PpuRegisters {
     address: AddrRegister,
 }
 
+/// Ppu (Picture Processing Unit)
+/// https://www.nesdev.org/wiki/PPU_memory_map
 pub struct Ppu {
     /// CHR ROM (also called "pattern tables")
     chr_rom: Vec<u8>,
@@ -100,7 +100,7 @@ impl Ppu {
         }
     }
 
-    fn palette_from_palette_idx(&self, palette_idx: PaletteIdx) -> [u8; 4] {
+    fn lookup_palette(&self, palette_idx: PaletteIdx) -> [u8; 4] {
         let p_idx = palette_idx.0;
         assert!(p_idx < 8);
 
@@ -120,19 +120,13 @@ impl Ppu {
     fn palette_for_bg_tile(&self, pos: (usize, usize)) -> PaletteIdx {
         let (x, y) = pos;
 
+        // TODO
+        let bank = 0;
+        // let bank = self.get_background_pattern_bank();
+
         // For background tiles, the last 64 bytes of each nametable are reserved
         // for assigning a specific palette to a part of the background.
         // This section is called an attribute table.
-        let bank = if self
-            .registers
-            .control
-            .contains(ControlRegister::BACKGROUND_PATTERN_ADDR)
-        {
-            1
-        } else {
-            0
-        };
-
         let nametable_size = 1024;
         let attr_table_size = 64;
         let nt_end = nametable_size * (bank + 1);
@@ -167,22 +161,9 @@ impl Ppu {
         assert!(which_nametable <= 3);
         // TODO: which_nametable isn't being used.. this likely relates to scrolling+mirroring
 
-        // Determine which CHR ROM bank (Pattern Table) is used for background tiles (by reading bit 4 from Control Register)
-        let bank = if self
-            .registers
-            .control
-            .contains(ControlRegister::BACKGROUND_PATTERN_ADDR)
-        {
-            1
-        } else {
-            0
-        };
-        // let bank = self
-        //     .registers
-        //     .control
-        //     .intersection(ControlRegister::BACKGROUND_PATTERN_ADDR)
-        //     .bits() as usize;
-        assert!(bank <= 1);
+        // TODO
+        // let bank = self.get_background_pattern_bank();
+        let bank = 0;
 
         let rows = 30;
         let cols = 32;
@@ -190,7 +171,7 @@ impl Ppu {
             for x in 0..cols {
                 let tile_n = self.vram[y * cols + x] as usize;
                 let bgp_idx = self.palette_for_bg_tile((x, y));
-                let palette = self.palette_from_palette_idx(bgp_idx);
+                let palette = self.lookup_palette(bgp_idx);
                 frame.draw_bg_tile(&self.chr_rom, bank, tile_n, (x, y), palette);
             }
         }
@@ -202,12 +183,8 @@ impl Ppu {
         // So let's draw things in reverse to handle that
         for b in self.oam_data.chunks(4).rev() {
             let sprite = self.parse_sprite_from_oam_data(b);
-            let palette = self.palette_from_palette_idx(sprite.palette_idx);
+            let palette = self.lookup_palette(sprite.palette_idx);
             let _ = frame.draw_sprite(&self.chr_rom, &sprite, palette);
-            // if visible && palette.iter().any(|x| *x != 0) {
-            //     println!("palette: {:?}", palette);
-            //     println!("Drew Sprite: {:?}", sprite);
-            // }
         }
     }
 
@@ -357,12 +334,6 @@ impl Ppu {
         self.registers.scroll.is_y_scroll = !self.registers.scroll.is_y_scroll;
     }
 
-    fn increment_vram_addr(&mut self) {
-        self.registers
-            .address
-            .increment(self.registers.control.vram_increment_amount());
-    }
-
     pub fn write_to_addr(&mut self, data: u8) {
         self.registers.address.external_write(data);
     }
@@ -373,20 +344,32 @@ impl Ppu {
 
         let val = match addr {
             0..0x2000 => self.chr_rom[addr as usize],
-            0x2000..0x3F00 => {
-                let mirrored = self.mirror_vram_addr(addr);
-                self.vram[mirrored as usize]
-            }
-            0x3F00..0x4000 => {
-                let addr = (addr - 0x3F00) % (self.palettes.len() as u16);
-                self.palettes[addr as usize]
-            }
-            0x4000..=0xFFFF => todo!("read_data doesn't yet handle the mirrors range"),
+            0x2000..0x3F00 => self.vram[self.mirror_vram_addr(addr) as usize],
+            0x3F00..0x4000 => self.palettes[self.mirror_palettes_addr(addr) as usize],
+            0x4000..=0xFFFF => todo!("doesn't yet handle the mirrors range"),
         };
 
         let out = self.read_data_buffer;
         self.read_data_buffer = val;
         out
+    }
+
+    pub fn write_to_data(&mut self, data: u8) {
+        let addr = self.registers.address.get();
+        self.increment_vram_addr();
+
+        match addr {
+            0..0x2000 => panic!("attempt to write to CHR ROM (read-only)"),
+            0x2000..0x3F00 => self.vram[self.mirror_vram_addr(addr) as usize] = data,
+            0x3F00..0x4000 => self.palettes[self.mirror_palettes_addr(addr) as usize] = data,
+            0x4000..=0xFFFF => todo!("doesn't yet handle the mirrors range"),
+        }
+    }
+
+    fn increment_vram_addr(&mut self) {
+        self.registers
+            .address
+            .increment(self.registers.control.vram_increment_amount());
     }
 
     fn mirror_vram_addr(&mut self, addr: u16) -> u16 {
@@ -395,7 +378,6 @@ impl Ppu {
         let name_table_idx = base / 0x0400;
 
         // and ROM-configured mirroring
-
         match (self.mirroring, name_table_idx) {
             (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 2) => base - 0x0400,
             (Mirroring::Vertical, 2) | (Mirroring::Vertical, 3) | (Mirroring::Horizontal, 3) => {
@@ -408,22 +390,8 @@ impl Ppu {
         }
     }
 
-    pub fn write_to_data(&mut self, data: u8) {
-        let addr = self.registers.address.get();
-        self.increment_vram_addr();
-
-        match addr {
-            0..0x2000 => panic!("attempt to write to CHR ROM (read-only)"),
-            0x2000..0x3F00 => {
-                let mirrored = self.mirror_vram_addr(addr);
-                self.vram[mirrored as usize] = data;
-            }
-            0x3F00..0x4000 => {
-                let addr = (addr - 0x3F00) % (self.palettes.len() as u16);
-                self.palettes[addr as usize] = data;
-            }
-            0x4000..=0xFFFF => todo!("read_data doesn't yet handle the mirrors range"),
-        }
+    fn mirror_palettes_addr(&mut self, addr: u16) -> u16 {
+        (addr - 0x3F00) % (self.palettes.len() as u16)
     }
 
     pub fn write_to_oam_data(&mut self, data: u8) {
@@ -712,21 +680,15 @@ mod tests {
         ppu.palettes[0] = 255;
         ppu.palettes[1..32].copy_from_slice(Vec::from_iter(1..32).as_slice());
 
-        assert_eq!(ppu.palette_from_palette_idx(PaletteIdx(0)), [255, 1, 2, 3]);
-        assert_eq!(ppu.palette_from_palette_idx(PaletteIdx(1)), [255, 5, 6, 7]);
-        assert_eq!(
-            ppu.palette_from_palette_idx(PaletteIdx(2)),
-            [255, 9, 10, 11]
-        );
-        assert_eq!(
-            ppu.palette_from_palette_idx(PaletteIdx(3)),
-            [255, 13, 14, 15]
-        );
+        assert_eq!(ppu.lookup_palette(PaletteIdx(0)), [255, 1, 2, 3]);
+        assert_eq!(ppu.lookup_palette(PaletteIdx(1)), [255, 5, 6, 7]);
+        assert_eq!(ppu.lookup_palette(PaletteIdx(2)), [255, 9, 10, 11]);
+        assert_eq!(ppu.lookup_palette(PaletteIdx(3)), [255, 13, 14, 15]);
 
         // sprite palette
-        assert_eq!(ppu.palette_from_palette_idx(PaletteIdx(4)), [0, 17, 18, 19]);
+        assert_eq!(ppu.lookup_palette(PaletteIdx(4)), [0, 17, 18, 19]);
 
-        assert_eq!(ppu.palette_from_palette_idx(PaletteIdx(5)), [0, 21, 22, 23]);
+        assert_eq!(ppu.lookup_palette(PaletteIdx(5)), [0, 21, 22, 23]);
     }
 
     #[test]

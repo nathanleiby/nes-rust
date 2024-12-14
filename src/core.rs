@@ -309,13 +309,6 @@ impl<'a, 'b: 'a> Cpu<'a> {
             self.pc += 1;
 
             let (name, cycles, mode) = lookup_opcode(opcode);
-            if cycles.0 == 0 {
-                todo!(
-                    "cycles is mistakenly set to 0 for {} (0x{:02X}) ",
-                    name,
-                    opcode
-                );
-            }
             let size = addressing_mode_to_size(&mode);
 
             let saved_pc = self.pc;
@@ -1334,7 +1327,6 @@ mod tests {
         let inst = 0x6C;
         cpu._load_test_rom(vec![inst, lo, hi]);
         cpu.reset();
-        // cpu.mem_write_u16(mem_with_dest, jump_dest);
         cpu.mem_write(0x0300, 0x40);
         cpu.mem_write(0x03FF, 0x80);
         cpu.mem_write(0x0400, 0x50);

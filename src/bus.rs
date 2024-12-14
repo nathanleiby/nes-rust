@@ -97,10 +97,12 @@ impl Mem for Bus<'_> {
             0x4014 => {
                 panic!("attempt to read from write-only PPU register: 0x4014 (OAMDMA - Sprite DMA)")
             }
+            0x4000..=0x4013 | 0x4015 => 0, // TODO: implement APU,
             0x4016 => self.gamepad1.read(),
             0x4017 => self.gamepad2.read(),
+            0x4018..0x4020 => 0, // APU and I/O functionality that is normally disabled
+            0x4020..0x8000 => 0, // available for cartridge use
             PRG_ROM_START..=PRG_ROM_END => self.read_prg_rom(addr),
-            _ => 0,
         }
     }
 

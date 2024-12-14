@@ -1,4 +1,7 @@
 - [ ] Figure out why sprites aren't drawing
+- [ ] Investigate various crashes that are trying to write to wrong memory
+- [ ] Try running more NES Test roms, maybe they can help now that i have some graphics?
+  - lots of the PPU test rom links here are broken.. https://www.nesdev.org/wiki/Emulator_tests
 
 --
 

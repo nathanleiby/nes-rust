@@ -1,5 +1,4 @@
 use core::Cpu;
-use core::Mem;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
@@ -22,7 +21,6 @@ use bus::Bus;
 use gamepad::GamepadButtons;
 use gamepad::GamepadRegister;
 use ppu::Ppu;
-use rand::random;
 use render::Frame;
 use rom::Rom;
 use sdl2::event::Event;
@@ -64,11 +62,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
     let window = video_subsystem
-        .window(
-            "Game Background",
-            (256.0 * 3.0) as u32,
-            (240.0 * 3.0) as u32,
-        )
+        .window("nes-rust", (256.0 * 3.0) as u32, (240.0 * 3.0) as u32)
         .position_centered()
         .build()?;
 
@@ -79,20 +73,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let creator = canvas.texture_creator();
     let mut texture = creator.create_texture_target(PixelFormatEnum::RGB24, 256, 240)?;
 
-    // Try drawing.. something
-    canvas.present();
-
     // Setup the CPU to run the program
     let rom = Rom::new(&program);
-
-    let mut frame = Frame::new();
-
     let mut cpu = Cpu::new();
-
     let keys = KeyboardInput::new();
     let bus = Bus::new_with_cb(
         rom,
         move |ppu: &Ppu, gamepad1: &mut GamepadRegister, _gamepad2: &mut GamepadRegister| {
+            // compute the screen's content from the PPU
+            let mut frame = Frame::new();
             ppu.draw_background(&mut frame);
             ppu.draw_sprites(&mut frame);
 
@@ -101,6 +90,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             canvas.copy(&texture, None, None).unwrap();
             canvas.present();
 
+            // handle keyboard input
             for event in event_pump.poll_iter() {
                 match event {
                     Event::Quit { .. }
@@ -133,17 +123,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     cpu.set_bus(bus);
     cpu.reset();
 
+    // Run!
     cpu.run_with_callback(|cpu| {
         if env::var("CPU_TRACE").is_ok() {
             println!("{}", cpu.trace());
         } else if env::var("CPU_TRACELITE").is_ok() {
             println!("{}", cpu.tracelite());
         }
-
-        // update mem[0xFE] with a new random number
-        cpu.mem_write(0xFE, random::<u8>());
-
-        // sleep(Duration::new(0, 70_000));
     });
 
     Ok(())
