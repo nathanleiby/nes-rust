@@ -14,15 +14,16 @@ mod macros;
 mod ops;
 mod palette;
 mod ppu;
+mod render;
 mod rom;
 mod utility;
 
 use bus::Bus;
 use gamepad::GamepadButtons;
 use gamepad::GamepadRegister;
-use ppu::Frame;
 use ppu::Ppu;
 use rand::random;
+use render::Frame;
 use rom::Rom;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;

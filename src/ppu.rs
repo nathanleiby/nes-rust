@@ -1,119 +1,8 @@
 use bitflags::bitflags;
 
-use crate::{addr_register::AddrRegister, palette::SYSTEM_PALETTE, rom::Mirroring};
+use crate::{addr_register::AddrRegister, render::Frame, rom::Mirroring};
 
 // TODO: move UI rendering stuff that ties to SDL2 out of PPU
-pub struct Frame {
-    pub data: Vec<u8>,
-}
-
-impl Frame {
-    const WIDTH: usize = 256;
-    const HEIGHT: usize = 240;
-
-    pub fn new() -> Self {
-        Self {
-            data: vec![0; Frame::WIDTH * Frame::HEIGHT * 3],
-        }
-    }
-
-    pub fn set_pixel(&mut self, x: usize, y: usize, rgb: (u8, u8, u8)) {
-        let base = y * 3 * Frame::WIDTH + x * 3;
-        if base + 2 < self.data.len() {
-            self.data[base] = rgb.0;
-            self.data[base + 1] = rgb.1;
-            self.data[base + 2] = rgb.2
-        }
-    }
-
-    // tile_n can be thought of as the offset in the pattern table  (CHR ROM)
-    // pos (*8) relates to the value in the name table.
-    pub fn draw_bg_tile(
-        &mut self,
-        chr_rom: &[u8],
-        bank: usize,
-        tile_n: usize,
-        pos: (usize, usize),
-        palette: [u8; 4],
-    ) {
-        assert!(bank <= 1);
-
-        let tile_size_bytes = 16;
-        let bank_size_bytes: usize = 4096;
-        let tile_size = 8;
-
-        let (x, y) = pos;
-        for row in 0..tile_size {
-            let first_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + row;
-            let first_byte = chr_rom[first_byte_idx];
-            let second_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + 8 + row;
-            let second_byte = chr_rom[second_byte_idx];
-
-            if x == 0 && y == 0 {
-                log::info!(
-                    "(x:{:2},y:{:2}) 1: [{:04x}] {:04x} , 2: [{:04x}] {:04x}",
-                    x,
-                    y,
-                    first_byte_idx,
-                    first_byte,
-                    second_byte_idx,
-                    second_byte
-                );
-            }
-
-            for col in 0..tile_size {
-                let which_bit = 1 << (7 - col);
-                let lo_bit = first_byte & which_bit > 0;
-                let hi_bit = second_byte & which_bit > 0;
-                let palette_idx: u8 = ((hi_bit as u8) << 1) + (lo_bit as u8);
-                assert!(palette_idx < 4, "palette_idx was {}", palette_idx);
-                let color = SYSTEM_PALETTE[palette[palette_idx as usize] as usize];
-
-                self.set_pixel((x * tile_size) + col, (y * tile_size) + row, color);
-            }
-        }
-    }
-
-    pub fn draw_sprite(&mut self, chr_rom: &[u8], sprite: &Sprite, palette: [u8; 4]) -> bool {
-        if sprite.behind_background {
-            return false;
-        }
-
-        let bank = if sprite.use_tile_bank_1 { 1 } else { 0 };
-        let tile_n = sprite.tile_idx as usize;
-        let x = sprite.x as usize;
-        let y = sprite.y as usize;
-
-        let tile_size_bytes = 16;
-        let bank_size_bytes: usize = 4096;
-        let tile_size = 8;
-
-        let mut drew_something = false;
-        for row in 0..tile_size {
-            let first_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + row;
-            let first_byte = chr_rom[first_byte_idx];
-            // let second_byte_idx = bank * bank_size_bytes + tile_n * tile_size_bytes + row + 8;
-            let second_byte = chr_rom[first_byte_idx + 8];
-
-            for col in 0..tile_size {
-                let which_bit = 1 << (7 - col);
-                let lo_bit = first_byte & which_bit > 0;
-                let hi_bit = second_byte & which_bit > 0;
-                let palette_idx: u8 = ((hi_bit as u8) << 1) + (lo_bit as u8);
-                assert!(palette_idx < 4);
-
-                // 0 means transparent, for sprites
-                if palette_idx > 0 {
-                    drew_something = true;
-                    let color = SYSTEM_PALETTE[palette[palette_idx as usize] as usize];
-                    self.set_pixel(x + col, y + row, color);
-                }
-            }
-        }
-
-        drew_something
-    }
-}
 
 #[derive(Default)]
 pub struct PpuRegisters {
@@ -178,19 +67,19 @@ pub struct Ppu {
 #[derive(PartialEq, Eq, Debug, Default, Copy, Clone)]
 /// There are 4 possible background palettes (0,1,2,3) and 4 possible sprite palettes (4,5,6,7).
 /// These 8 palettes each are made up of four numbers, which are indices into ppu.palettes (Palette Table)
-struct PaletteIdx(usize);
+pub struct PaletteIdx(usize);
 
 #[derive(Default, Debug, PartialEq, Eq)]
 pub struct Sprite {
-    x: u8,
-    y: u8,
-    use_tile_bank_1: bool,
-    tile_idx: u8,
-    is_8_by_16: bool,
-    palette_idx: PaletteIdx,
-    behind_background: bool,
-    flip_horizontal: bool,
-    flip_vertical: bool,
+    pub x: u8,
+    pub y: u8,
+    pub use_tile_bank_1: bool,
+    pub tile_idx: u8,
+    pub is_8_by_16: bool,
+    pub palette_idx: PaletteIdx,
+    pub behind_background: bool,
+    pub flip_horizontal: bool,
+    pub flip_vertical: bool,
 }
 
 impl Ppu {
@@ -225,10 +114,7 @@ impl Ppu {
         ]
     }
 
-    // TODO: Improve my logic here. Potentially just use memory addrs
-    //      instead of my (x,y) tile abstraction which is confusiong since it's x*8 for a bg tile
-    //      or even x*8*2 when thinking of meta tiles..
-    /// Returns a BGPaletteIdx, which can be used to look up a background palette
+    // Gets the Palette for a given tile
     /// See: https://www.nesdev.org/wiki/PPU_attribute_tables
     fn palette_for_bg_tile(&self, pos: (usize, usize)) -> PaletteIdx {
         let (x, y) = pos;
