@@ -16,17 +16,18 @@ pub struct Bus<'call> {
     gamepad1: GamepadRegister,
     gamepad2: GamepadRegister,
     cycles: usize,
-    gameloop_callback: Box<dyn FnMut(&Ppu) + 'call>,
+    #[allow(clippy::type_complexity)]
+    gameloop_callback: Box<dyn FnMut(&Ppu, &mut GamepadRegister, &mut GamepadRegister) + 'call>,
 }
 
 impl<'a> Bus<'a> {
     pub fn new(rom: Rom) -> Self {
-        Bus::new_with_cb(rom, |_| {})
+        Bus::new_with_cb(rom, |_, _, _| {})
     }
 
     pub fn new_with_cb<'call, F>(rom: Rom, gameloop_callback: F) -> Self
     where
-        F: FnMut(&Ppu) + 'call + 'a,
+        F: FnMut(&Ppu, &mut GamepadRegister, &mut GamepadRegister) + 'call + 'a,
     {
         let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
 
@@ -46,7 +47,7 @@ impl<'a> Bus<'a> {
 
         let should_rerender = self.ppu.tick(cycles * 3);
         if should_rerender {
-            (self.gameloop_callback)(&self.ppu)
+            (self.gameloop_callback)(&self.ppu, &mut self.gamepad1, &mut self.gamepad2)
         }
     }
 
@@ -126,21 +127,20 @@ impl Mem for Bus<'_> {
             self.ppu.write_to_oam_data(data);
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
             panic!("attempt to write to ROM cartridge")
+        } else if [0x4000, 0x4001, 0x4002, 0x4003, 0x4004, 0x4015, 0x4017].contains(&addr) {
+            // } else if [0x4000, 0x4001, 0x4002, 0x4003, 0x4004, 0x4015, 0x4017].contains(&addr) {
         } else if (0x4000..=0x4013).contains(&addr) || addr == 0x4015 {
-            // https://www.nesdev.org/wiki/APU
             // todo!(
             //     "attempt to write to addr=0x{:04X}. This will be the APU, later!",
             //     addr
             // )
             // TODO
         } else if addr == 0x4016 {
-            // Writes Joystick strobe?
-            // https://www.nesdev.org/wiki/2A03
+            self.gamepad1.write(data);
         } else if addr == 0x4017 {
-            // Frame Counter Control
-            // https://www.nesdev.org/wiki/APU_Frame_Counter
+            self.gamepad2.write(data);
         } else {
-            // todo!("attempt to write to memory addr=0x{:04X}", addr)
+            todo!("attempt to write to memory addr=0x{:04X}", addr)
         };
     }
 }

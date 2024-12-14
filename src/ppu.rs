@@ -281,12 +281,20 @@ impl Ppu {
         // TODO: which_nametable isn't being used.. this likely relates to scrolling+mirroring
 
         // Determine which CHR ROM bank (Pattern Table) is used for background tiles (by reading bit 4 from Control Register)
-        let bank = (self
+        let bank = if self
             .registers
             .control
-            .intersection(ControlRegister::BACKGROUND_PATTERN_ADDR)
-            .bits()
-            > 0) as usize;
+            .contains(ControlRegister::BACKGROUND_PATTERN_ADDR)
+        {
+            1
+        } else {
+            0
+        };
+        // let bank = self
+        //     .registers
+        //     .control
+        //     .intersection(ControlRegister::BACKGROUND_PATTERN_ADDR)
+        //     .bits() as usize;
         assert!(bank <= 1);
 
         let rows = 30;

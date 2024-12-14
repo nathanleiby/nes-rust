@@ -1,5 +1,6 @@
 use core::Cpu;
 use core::Mem;
+use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -17,32 +18,35 @@ mod rom;
 mod utility;
 
 use bus::Bus;
+use gamepad::GamepadButtons;
+use gamepad::GamepadRegister;
 use ppu::Frame;
+use ppu::Ppu;
 use rand::random;
 use rom::Rom;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;
 
-// struct KeyboardInput {
-//     key_map: HashMap<Keycode, GamepadButtons>,
-// }
+struct KeyboardInput {
+    key_map: HashMap<Keycode, GamepadButtons>,
+}
 
-// impl KeyboardInput {
-//     pub fn new() -> Self {
-//         let mut key_map = HashMap::new();
-//         key_map.insert(Keycode::Down, gamepad::GamepadButtons::Down);
-//         key_map.insert(Keycode::Up, gamepad::GamepadButtons::Up);
-//         key_map.insert(Keycode::Right, gamepad::GamepadButtons::Right);
-//         key_map.insert(Keycode::Left, gamepad::GamepadButtons::Left);
-//         key_map.insert(Keycode::Space, gamepad::GamepadButtons::Select);
-//         key_map.insert(Keycode::Return, gamepad::GamepadButtons::Start);
-//         key_map.insert(Keycode::A, gamepad::GamepadButtons::ButtonA);
-//         key_map.insert(Keycode::S, gamepad::GamepadButtons::ButtonB);
+impl KeyboardInput {
+    pub fn new() -> Self {
+        let mut key_map = HashMap::new();
+        key_map.insert(Keycode::Down, gamepad::GamepadButtons::Down);
+        key_map.insert(Keycode::Up, gamepad::GamepadButtons::Up);
+        key_map.insert(Keycode::Right, gamepad::GamepadButtons::Right);
+        key_map.insert(Keycode::Left, gamepad::GamepadButtons::Left);
+        key_map.insert(Keycode::Space, gamepad::GamepadButtons::Select);
+        key_map.insert(Keycode::Return, gamepad::GamepadButtons::Start);
+        key_map.insert(Keycode::A, gamepad::GamepadButtons::ButtonA);
+        key_map.insert(Keycode::S, gamepad::GamepadButtons::ButtonB);
 
-//         Self { key_map }
-//     }
-// }
+        Self { key_map }
+    }
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -84,26 +88,46 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut cpu = Cpu::new();
 
-    let bus = Bus::new_with_cb(rom, move |ppu| {
-        ppu.draw_background(&mut frame);
-        ppu.draw_sprites(&mut frame);
+    let keys = KeyboardInput::new();
+    let bus = Bus::new_with_cb(
+        rom,
+        move |ppu: &Ppu, gamepad1: &mut GamepadRegister, _gamepad2: &mut GamepadRegister| {
+            ppu.draw_background(&mut frame);
+            ppu.draw_sprites(&mut frame);
 
-        // redraw the screen
-        texture.update(None, &frame.data, 256 * 3).unwrap();
-        canvas.copy(&texture, None, None).unwrap();
-        canvas.present();
+            // redraw the screen
+            texture.update(None, &frame.data, 256 * 3).unwrap();
+            canvas.copy(&texture, None, None).unwrap();
+            canvas.present();
 
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => std::process::exit(0),
-                _ => { /* do nothing */ }
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit { .. }
+                    | Event::KeyDown {
+                        keycode: Some(Keycode::Escape),
+                        ..
+                    } => std::process::exit(0),
+                    Event::KeyDown {
+                        keycode: Some(kc), ..
+                    } => {
+                        if let Some(&button) = keys.key_map.get(&kc) {
+                            println!("button pressed: {:?}", button);
+                            gamepad1.set_button_status(button, true);
+                        }
+                    }
+                    Event::KeyUp {
+                        keycode: Some(kc), ..
+                    } => {
+                        if let Some(&button) = keys.key_map.get(&kc) {
+                            println!("button released: {:?}", button);
+                            gamepad1.set_button_status(button, false);
+                        }
+                    }
+                    _ => { /* do nothing */ }
+                }
             }
-        }
-    });
+        },
+    );
 
     cpu.set_bus(bus);
     cpu.reset();
@@ -118,54 +142,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         // update mem[0xFE] with a new random number
         cpu.mem_write(0xFE, random::<u8>());
 
-        // TODO: re-enable user input
-        // handle_user_input(cpu, &mut event_pump);
-
         // sleep(Duration::new(0, 70_000));
     });
 
     Ok(())
 }
-
-// fn handle_user_input(cpu: &mut Cpu, event_pump: &mut EventPump) {
-//     let keys = KeyboardInput::new();
-
-//     for event in event_pump.poll_iter() {
-//         match event {
-//             Event::Quit { .. }
-//             | Event::KeyDown {
-//                 keycode: Some(Keycode::Escape),
-//                 ..
-//             } => std::process::exit(0),
-//             Event::KeyDown {
-//                 keycode: Some(kc), ..
-//             } => {
-//                 if let Some(button) = keys.key_map.get(&kc) {
-//                     todo!("set button as PRESSED in gamepad1 (GamepadRegister");
-//                 }
-//             }
-//             Event::KeyUp {
-//                 keycode: Some(kc), ..
-//             } => {
-//                 if let Some(button) = keys.key_map.get(&kc) {
-//                     todo!("set button as RELEASED in gamepad1 (GamepadRegister");
-//                 }
-//             }
-//             _ => { /* do nothing */ }
-//         }
-//     }
-// }
-
-// fn color(byte: u8) -> Color {
-//     match byte {
-//         0 => sdl2::pixels::Color::BLACK,
-//         1 => sdl2::pixels::Color::WHITE,
-//         2 | 9 => sdl2::pixels::Color::GREY,
-//         3 | 10 => sdl2::pixels::Color::RED,
-//         4 | 11 => sdl2::pixels::Color::GREEN,
-//         5 | 12 => sdl2::pixels::Color::BLUE,
-//         6 | 13 => sdl2::pixels::Color::MAGENTA,
-//         7 | 14 => sdl2::pixels::Color::YELLOW,
-//         _ => sdl2::pixels::Color::CYAN,
-//     }
-// }

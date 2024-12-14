@@ -1,6 +1,7 @@
 use bitflags::bitflags;
 
 bitflags! {
+    #[derive(Copy, Clone, Debug)]
     /// Tracks the state of each button. (1 - pressed, 0 - released)
     pub struct GamepadButtons: u8 {
         const ButtonA = 1 << 0;
@@ -34,8 +35,6 @@ impl GamepadRegister {
 
     // returns the state of one button
     pub fn read(&mut self) -> u8 {
-        // TOOD: handle strobe bit behavior
-
         if self.current_idx > 7 {
             1
         } else {
