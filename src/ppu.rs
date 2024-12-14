@@ -156,18 +156,30 @@ impl Ppu {
     }
 
     pub fn draw_background(&self, frame: &mut Frame) {
-        // TODO: which_nametable isn't being used.. this likely relates to scrolling+mirroring
-
         let bank = self.get_background_pattern_bank();
+
+        // TODO: Investigate...
+        // Selecting a nametable here causes a temporarily black screen
+        // at at the start of pacman (vs nametable = 0).
+        // However, with nametable = 0 there's another bug of wrong colors at start.
+        // Both resolve to correct screen in 1-2 seconds.
+        let which_nametable = self
+            .registers
+            .control
+            .intersection(ControlRegister::NAMETABLE)
+            .bits() as usize;
+        assert!(which_nametable <= 3);
+        let nt_start = which_nametable * 0x400;
 
         let rows = 30;
         let cols = 32;
         for y in 0..rows {
             for x in 0..cols {
-                let tile_n = self.vram[y * cols + x] as usize;
+                let offset = y * cols + x;
+                let tile_n = self.vram[self.mirror_vram_addr((nt_start + offset) as u16) as usize];
                 let bgp_idx = self.palette_for_bg_tile((x, y));
                 let palette = self.lookup_palette(bgp_idx);
-                frame.draw_bg_tile(&self.chr_rom, bank, tile_n, (x, y), palette);
+                frame.draw_bg_tile(&self.chr_rom, bank, tile_n as usize, (x, y), palette);
             }
         }
     }

@@ -102,7 +102,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                         keycode: Some(kc), ..
                     } => {
                         if let Some(&button) = keys.key_map.get(&kc) {
-                            println!("button pressed: {:?}", button);
                             gamepad1.set_button_status(button, true);
                         }
                     }
@@ -110,7 +109,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                         keycode: Some(kc), ..
                     } => {
                         if let Some(&button) = keys.key_map.get(&kc) {
-                            println!("button released: {:?}", button);
                             gamepad1.set_button_status(button, false);
                         }
                     }
