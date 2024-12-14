@@ -2,7 +2,7 @@ use bitflags::bitflags;
 
 use crate::{
     addr_register::AddrRegister,
-    palette::SYSTEM_PALETTE,
+    palette::{self, SYSTEM_PALETTE},
     rom::Mirroring,
     utility::{addr_from, split_addr},
 };
@@ -34,7 +34,14 @@ impl Frame {
     // tile_n can be thought of as the offset in the pattern table  (CHR ROM)
     // pos (*8) relates to the value in the name table.
     /// VRAM (also called "name tables")
-    pub fn draw_tile(&mut self, chr_rom: &[u8], bank: usize, tile_n: usize, pos: (usize, usize)) {
+    pub fn draw_tile(
+        &mut self,
+        chr_rom: &[u8],
+        bank: usize,
+        tile_n: usize,
+        pos: (usize, usize),
+        palette: [u8; 4],
+    ) {
         assert!(bank <= 1);
 
         let tile_size_bytes = 16;
@@ -64,20 +71,9 @@ impl Frame {
                 let which_bit = 1 << (7 - col);
                 let lo_bit = first_byte & which_bit > 0;
                 let hi_bit = second_byte & which_bit > 0;
-                // let palette_idx: u8 = ((hi_bit as u8) << 1) + (lo_bit as u8);
-                let palette_idx: u8 = ((lo_bit as u8) << 1) + (hi_bit as u8);
+                let palette_idx: u8 = ((hi_bit as u8) << 1) + (lo_bit as u8);
                 assert!(palette_idx < 4, "palette_idx was {}", palette_idx);
-                // TODO: lookup palette color
-                // let color = SYSTEM_PALLETE[(palette_idx * 3) as usize];
-                let color = match palette_idx {
-                    0 => SYSTEM_PALETTE[0x01],
-                    1 => SYSTEM_PALETTE[0x23],
-                    2 => SYSTEM_PALETTE[0x27],
-                    3 => SYSTEM_PALETTE[0x30],
-                    _ => {
-                        panic!("can't be.. idx = {}", palette_idx)
-                    }
-                };
+                let color = SYSTEM_PALETTE[palette[palette_idx as usize] as usize];
 
                 self.set_pixel((x * tile_size) + col, (y * tile_size) + row, color);
             }
@@ -126,6 +122,9 @@ pub struct Ppu {
     /// The remaining 64 bytes make up the Color Palette.
     /// A
     vram: [u8; 2048],
+
+    // TODO: Are we only allowed to use 32 of the possible 64 NES colors?
+    /// Palette Table
     palettes: [u8; 32],
     oam_data: [u8; 256],
 
@@ -141,6 +140,11 @@ pub struct Ppu {
     /// clock_cycles within the Frame (0..=261*341)
     clock_cycles: usize,
 }
+
+#[derive(PartialEq, Eq, Debug)]
+/// There are 4 possible background palettes (0,1,2,3)
+/// These each map to a set of 4 indices, which are lookups in the ppu.palettes (Palette Table)
+struct BGPaletteIdx(usize);
 
 impl Ppu {
     pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
@@ -158,6 +162,61 @@ impl Ppu {
             scanline: 0,
             clock_cycles: 0,
         }
+    }
+
+    fn palette_from_bg_palette_idx(&self, bgp_idx: BGPaletteIdx) -> [u8; 4] {
+        let palette_idx = bgp_idx.0;
+        assert!(palette_idx < 4);
+        let start = (palette_idx * 4 + 1) as usize;
+
+        // The first entry is a special case for background
+        [
+            self.palettes[0],
+            self.palettes[start],
+            self.palettes[start + 1],
+            self.palettes[start + 2],
+        ]
+    }
+
+    // TODO: Improve my logic here. Potentially just use memory addrs
+    //      instead of my (x,y) tile abstraction which is confusiong since it's x*8 for a bg tile
+    //      or even x*8*2 when thinking of meta tiles..
+    /// Returns a BGPaletteIdx, which can be used to look up a background palette
+    fn palette_for_tile(&self, pos: (usize, usize)) -> BGPaletteIdx {
+        let (x, y) = pos;
+
+        // For background tiles, the last 64 bytes of each nametable are reserved
+        // for assigning a specific palette to a part of the background.
+        // This section is called an attribute table.
+        let bank = if self
+            .registers
+            .control
+            .contains(ControlRegister::BACKGROUND_PATTERN_ADDR)
+        {
+            1
+        } else {
+            0
+        };
+        let bank_size = 1024;
+        let attr_table_size = 64;
+        let bank_end = bank_size * (bank + 1);
+
+        let attr_table = &self.vram[bank_end - attr_table_size..bank_end];
+        let attr_table_idx = (y / 4) * 4 + (x / 4);
+        let attr_table_byte = attr_table[attr_table_idx];
+
+        let meta_tile = (x % 4 < 2, y % 4 < 2);
+        let shift = match meta_tile {
+            (true, true) => 0,   // top-left
+            (false, true) => 2,  // top-right
+            (true, false) => 4,  // bottom-left
+            (false, false) => 6, // bottom-right
+        };
+
+        let palette_idx = ((attr_table_byte >> shift) & 0b11) as usize;
+        assert!(palette_idx < 4);
+
+        BGPaletteIdx(palette_idx)
     }
 
     // tile_n can be thought of as the offset in the pattern table  (CHR ROM)
@@ -180,15 +239,18 @@ impl Ppu {
             .bits() as usize;
         assert!(bank <= 1);
 
-        for y in 0..30 {
-            for x in 0..32 {
-                let tile_n = self.vram[y * 32 + x] as usize;
-                frame.draw_tile(&self.chr_rom, bank, tile_n, (x, y));
+        let rows = 30;
+        let cols = 32;
+        for y in 0..rows {
+            for x in 0..cols {
+                let tile_n = self.vram[y * cols + x] as usize;
+                let bgp_idx = self.palette_for_tile((x, y));
+                let palette = self.palette_from_bg_palette_idx(bgp_idx);
+                frame.draw_tile(&self.chr_rom, bank, tile_n, (x, y), palette);
             }
         }
     }
 
-    // TODO: Write some unit tests around tick() .. seems like it's not triggering
     pub fn tick(&mut self, cycles: usize) -> bool {
         let mut should_rerender = false;
 
@@ -204,7 +266,9 @@ impl Ppu {
             // The VBlank flag of the PPU is set at tick 1 (the second tick) of scanline 241
             // Here we are approximating that by clearing on dot 0 or above.
             self.set_ppu_vblank_status(true);
-            // TODO: self.status.set_sprite_zero_hit(false);
+            self.registers
+                .status
+                .remove(StatusRegister::SPRITE_0_HIT_FLAG);
             should_rerender = true
         }
 
@@ -214,7 +278,9 @@ impl Ppu {
             // Here we are approximating that by clearing on dot 0 or above.
             self.set_ppu_vblank_status(false);
             self.nmi_interrupt = None;
-            // TODO: self.status.set_sprite_zero_hit(false);
+            self.registers
+                .status
+                .remove(StatusRegister::SPRITE_0_HIT_FLAG);
         }
 
         self.clock_cycles %= 262 * 341;
@@ -515,6 +581,7 @@ mod tests {
         let should_rerender = ppu.tick(240 * 341);
         assert_eq!(ppu.get_tick_status(), (241, 241 * 341));
         assert!(should_rerender);
+        assert!(ppu.poll_nmi_interrupt().is_some());
         assert!(ppu.poll_nmi_interrupt().is_none());
         assert!(get_ppu_vblank_status(&mut ppu));
 
@@ -563,5 +630,84 @@ mod tests {
 
         // should consume the interrupt by polling it
         assert!(ppu.poll_nmi_interrupt().is_none());
+    }
+
+    #[test]
+    fn test_palette_for_bg_tile() {
+        let mut ppu = new_test_ppu();
+
+        // All of the reads in the next group (x in 0..=3, y in 0..=3) map to this part of vram
+        // This is the 0th index in the attribute table
+        let attr_table_start = 1024 - 64;
+        ppu.vram[attr_table_start] = 0b00011011;
+
+        assert_eq!(ppu.palette_for_tile((0, 0)), BGPaletteIdx(3));
+        assert_eq!(ppu.palette_for_tile((1, 0)), BGPaletteIdx(3));
+        assert_eq!(ppu.palette_for_tile((0, 1)), BGPaletteIdx(3));
+        assert_eq!(ppu.palette_for_tile((1, 1)), BGPaletteIdx(3));
+
+        assert_eq!(ppu.palette_for_tile((2, 0)), BGPaletteIdx(2));
+        assert_eq!(ppu.palette_for_tile((3, 0)), BGPaletteIdx(2));
+        assert_eq!(ppu.palette_for_tile((2, 1)), BGPaletteIdx(2));
+        assert_eq!(ppu.palette_for_tile((3, 1)), BGPaletteIdx(2));
+
+        assert_eq!(ppu.palette_for_tile((0, 2)), BGPaletteIdx(1));
+        assert_eq!(ppu.palette_for_tile((1, 3)), BGPaletteIdx(1));
+        assert_eq!(ppu.palette_for_tile((0, 2)), BGPaletteIdx(1));
+        assert_eq!(ppu.palette_for_tile((1, 3)), BGPaletteIdx(1));
+
+        assert_eq!(ppu.palette_for_tile((2, 2)), BGPaletteIdx(0));
+        assert_eq!(ppu.palette_for_tile((3, 3)), BGPaletteIdx(0));
+        assert_eq!(ppu.palette_for_tile((2, 2)), BGPaletteIdx(0));
+        assert_eq!(ppu.palette_for_tile((3, 3)), BGPaletteIdx(0));
+
+        ppu.vram[attr_table_start + 1] = 0b11111111;
+        for x in 4..=7 {
+            for y in 0..=3 {
+                assert_eq!(ppu.palette_for_tile((x, y)), BGPaletteIdx(3));
+            }
+        }
+
+        ppu.vram[attr_table_start + 2] = 0b01010101;
+        for x in 8..=11 {
+            for y in 0..=3 {
+                assert_eq!(ppu.palette_for_tile((x, y)), BGPaletteIdx(1));
+            }
+        }
+
+        ppu.vram[attr_table_start + 5] = 0b10101010;
+        for x in 4..=7 {
+            for y in 4..=7 {
+                assert_eq!(ppu.palette_for_tile((x, y)), BGPaletteIdx(2));
+            }
+        }
+    }
+
+    #[test]
+    fn test_palette_from_bg_palette_idx() {
+        let mut ppu = new_test_ppu();
+
+        ppu.palettes[0] = 255;
+        ppu.palettes[1..=3].copy_from_slice(&[1, 2, 3]); // bg_pallete idx=0
+        ppu.palettes[5..=7].copy_from_slice(&[5, 6, 7]); // bg_pallete idx=1
+        ppu.palettes[9..=11].copy_from_slice(&[9, 10, 11]); // bg_pallete idx=2
+        ppu.palettes[13..=15].copy_from_slice(&[13, 14, 15]); // bg_pallete idx=3
+
+        assert_eq!(
+            ppu.palette_from_bg_palette_idx(BGPaletteIdx(0)),
+            [255, 1, 2, 3]
+        );
+        assert_eq!(
+            ppu.palette_from_bg_palette_idx(BGPaletteIdx(1)),
+            [255, 5, 6, 7]
+        );
+        assert_eq!(
+            ppu.palette_from_bg_palette_idx(BGPaletteIdx(2)),
+            [255, 9, 10, 11]
+        );
+        assert_eq!(
+            ppu.palette_from_bg_palette_idx(BGPaletteIdx(3)),
+            [255, 13, 14, 15]
+        );
     }
 }
