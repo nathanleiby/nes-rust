@@ -126,18 +126,21 @@ impl Mem for Bus<'_> {
             self.ppu.write_to_oam_data(data);
         } else if (PRG_ROM_START..=PRG_ROM_END).contains(&addr) {
             panic!("attempt to write to ROM cartridge")
-        } else if [0x4000, 0x4001, 0x4002, 0x4003, 0x4004, 0x4015, 0x4017].contains(&addr) {
+        } else if (0x4000..=0x4013).contains(&addr) || addr == 0x4015 {
+            // https://www.nesdev.org/wiki/APU
             // todo!(
             //     "attempt to write to addr=0x{:04X}. This will be the APU, later!",
             //     addr
             // )
             // TODO
         } else if addr == 0x4016 {
-            self.gamepad1.write(data);
+            // Writes Joystick strobe?
+            // https://www.nesdev.org/wiki/2A03
         } else if addr == 0x4017 {
-            self.gamepad2.write(data);
+            // Frame Counter Control
+            // https://www.nesdev.org/wiki/APU_Frame_Counter
         } else {
-            todo!("attempt to write to memory addr=0x{:04X}", addr)
+            // todo!("attempt to write to memory addr=0x{:04X}", addr)
         };
     }
 }

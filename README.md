@@ -29,6 +29,9 @@ Priorities:
   - overflow and underflow: https://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
 - Making Games
   - and more.. https://github.com/denisenepraunig/nes-development
+- How games should look:
+  - Donkey Kong 1: https://www.youtube.com/watch?v=p54nqmtK50Y&ab_channel=IGN
+  - Pacman: https://www.youtube.com/watch?v=DxFjFS-idYk&ab_channel=WorldofLongplays
 
 ### Other interesting Tools
 

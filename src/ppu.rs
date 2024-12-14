@@ -232,11 +232,12 @@ impl Ppu {
         assert!(which_nametable <= 3);
 
         // Determine which CHR ROM bank is used for background tiles (by reading bit 4 from Control Register)
-        let bank = self
+        let bank = (self
             .registers
             .control
             .intersection(ControlRegister::BACKGROUND_PATTERN_ADDR)
-            .bits() as usize;
+            .bits()
+            > 0) as usize;
         assert!(bank <= 1);
 
         let rows = 30;
