@@ -190,35 +190,14 @@ impl Ppu {
 
     fn parse_sprite_from_oam_data(&self, b: &[u8]) -> Sprite {
         assert!(b.len() == 4);
-
-        // parse sprite (4 bytes)
         let y = b[0];
 
         let tile_data = b[1];
-        // this is a number 0 or 1, and maps to 0x0000 or 0x1000 within pattern table (chr rom)
-        let (tile_bank, tile_idx, is_8_by_16) = if self
-            .registers
-            .control
-            .contains(ControlRegister::SPRITE_SIZE)
-        {
-            // For 8x16 sprites (bit 5 of PPUCTRL set), the PPU ignores the pattern table selection and selects a pattern table from bit 0 of this number.
-            let tile_bank = tile_data & 0b1;
-            let tile_idx = tile_data & 0b1111_1110;
-
-            (tile_bank, tile_idx, true)
+        let is_8_by_16 = self.get_sprite_size_is_8x16();
+        let (pattern_table_idx, tile_idx) = if is_8_by_16 {
+            (tile_data & 0b1, tile_data & 0b1111_1110)
         } else {
-            // For 8x8 sprites, this is the tile number of this sprite within the pattern table selected in bit 3 of PPUCTRL ($2000).
-            let tile_bank = if self
-                .registers
-                .control
-                .contains(ControlRegister::SPRITE_PATTERN_ADDR)
-            {
-                1
-            } else {
-                0
-            };
-
-            (tile_bank, tile_data, false)
+            (self.get_sprite_pattern_table(), tile_data)
         };
 
         let attributes = b[2];
@@ -227,20 +206,36 @@ impl Ppu {
         let flip_horizontal = attributes & (1 << 6) > 0;
         let flip_vertical = attributes & (1 << 7) > 0;
 
-        // let sprite_data = self.chr_rom[tile_bank as usize * 1024 + tile_idx];
-
         let x = b[3];
 
         Sprite {
             x,
             y,
-            use_tile_bank_1: tile_bank == 1,
+            use_tile_bank_1: pattern_table_idx == 1,
             tile_idx,
             is_8_by_16,
             palette_idx,
             behind_background: foreground_priority,
             flip_horizontal,
             flip_vertical,
+        }
+    }
+
+    fn get_sprite_size_is_8x16(&self) -> bool {
+        self.registers
+            .control
+            .contains(ControlRegister::SPRITE_SIZE)
+    }
+
+    fn get_sprite_pattern_table(&self) -> u8 {
+        if self
+            .registers
+            .control
+            .contains(ControlRegister::SPRITE_PATTERN_ADDR)
+        {
+            1
+        } else {
+            0
         }
     }
 
