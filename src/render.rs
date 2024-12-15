@@ -86,9 +86,10 @@ impl Frame {
         }
 
         // Lookup the tile
-        let bank = if sprite.use_tile_bank_1 { 1 } else { 0 };
         let tile_n = sprite.tile_idx as usize;
-        let pattern_table = &chr_rom[bank * PATTERN_TABLE_SIZE..(bank + 1) * PATTERN_TABLE_SIZE];
+        let pt_idx = if sprite.use_pattern_table_1 { 1 } else { 0 };
+        let pattern_table =
+            &chr_rom[pt_idx * PATTERN_TABLE_SIZE..(pt_idx + 1) * PATTERN_TABLE_SIZE];
         let tile = get_tile(&pattern_table, tile_n);
 
         // Draw the tile

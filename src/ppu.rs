@@ -49,6 +49,7 @@ pub struct Ppu {
     vram: [u8; 2048],
 
     /// Palette Table
+    /// Backgrounds and sprites each have 4 palettes of 4 colors located at $3F00-$3F1F in VRAM
     palette_table: [u8; 32],
     oam_data: [u8; 256],
 
@@ -74,7 +75,7 @@ pub struct PaletteIdx(usize);
 pub struct Sprite {
     pub x: u8,
     pub y: u8,
-    pub use_tile_bank_1: bool,
+    pub use_pattern_table_1: bool,
     pub tile_idx: u8,
     pub is_8_by_16: bool,
     pub palette_idx: PaletteIdx,
@@ -226,7 +227,7 @@ impl Ppu {
         Sprite {
             x,
             y,
-            use_tile_bank_1: pattern_table_idx == 1,
+            use_pattern_table_1: pattern_table_idx == 1,
             tile_idx,
             is_8_by_16,
             palette_idx,
@@ -401,7 +402,13 @@ impl Ppu {
     }
 
     fn mirror_palettes_addr(&mut self, addr: u16) -> u16 {
-        (addr - 0x3F00) % (self.palette_table.len() as u16)
+        match addr {
+            // Note that entry 0 of each palette is also unique in that its color value is shared between the background and sprite palettes, so writing to either one updates the same internal storage.
+            // This means that the backdrop color can be written through both $3F00 and $3F10.
+            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => addr - 0x3F00 - 0x0010,
+            0x3f00..=0x3fff => addr - 0x3F00,
+            _ => panic!("invald palettes addr: {:04X}", addr),
+        }
     }
 
     pub fn write_to_oam_data(&mut self, data: u8) {
@@ -723,7 +730,7 @@ mod tests {
             flip_horizontal: true,
             flip_vertical: true,
             behind_background: true,
-            use_tile_bank_1: true,
+            use_pattern_table_1: true,
             ..Default::default()
         };
         assert_eq!(
