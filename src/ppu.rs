@@ -24,6 +24,9 @@ pub struct PpuRegisters {
     address: AddrRegister,
 }
 
+/// Size of Pattern Table aka Chr Rom (in bytes)
+pub const PATTERN_TABLE_SIZE: usize = 4096;
+
 /// Ppu (Picture Processing Unit)
 /// https://www.nesdev.org/wiki/PPU_memory_map
 pub struct Ppu {
@@ -119,24 +122,15 @@ impl Ppu {
 
     /// Gets the Palette for a given tile
     /// See: https://www.nesdev.org/wiki/PPU_attribute_tables
-    fn palette_for_bg_tile(&self, pos: (usize, usize)) -> PaletteIdx {
+    fn palette_for_bg_tile(&self, pos: (usize, usize), nt_start: usize) -> PaletteIdx {
         let (x, y) = pos;
-
-        let which_nametable = self
-            .registers
-            .control
-            .intersection(ControlRegister::NAMETABLE)
-            .bits() as usize;
-        assert!(which_nametable <= 3);
 
         // For background tiles, the last 64 bytes of each nametable are reserved
         // for assigning a specific palette to a part of the background.
         // This section is called an attribute table.
         let nametable_size = 0x400;
         let attr_table_size = 64;
-        let nt_end = nametable_size * (which_nametable + 1);
-
-        let attr_table_start = nt_end - attr_table_size;
+        let attr_table_start = nt_start + nametable_size - attr_table_size;
         let attr_table_idx = (y / 4) * 8 + (x / 4);
         let attr_table_byte =
             self.vram[self.mirror_vram_addr((attr_table_start + attr_table_idx) as u16) as usize];
@@ -157,6 +151,8 @@ impl Ppu {
 
     pub fn draw_background(&self, frame: &mut Frame) {
         let bank = self.get_background_pattern_bank();
+        let pattern_table =
+            &self.chr_rom[bank * PATTERN_TABLE_SIZE..(bank + 1) * PATTERN_TABLE_SIZE];
 
         // TODO: Investigate...
         // Selecting a nametable here causes a temporarily black screen
@@ -177,9 +173,9 @@ impl Ppu {
             for x in 0..cols {
                 let offset = y * cols + x;
                 let tile_n = self.vram[self.mirror_vram_addr((nt_start + offset) as u16) as usize];
-                let bgp_idx = self.palette_for_bg_tile((x, y));
+                let bgp_idx = self.palette_for_bg_tile((x, y), nt_start);
                 let palette = self.lookup_palette(bgp_idx);
-                frame.draw_bg_tile(&self.chr_rom, bank, tile_n as usize, (x, y), palette);
+                frame.draw_bg_tile(pattern_table, tile_n as usize, (x, y), palette);
             }
         }
     }
@@ -203,7 +199,7 @@ impl Ppu {
         for b in self.oam_data.chunks(4).rev() {
             let sprite = self.parse_sprite_from_oam_data(b);
             let palette = self.lookup_palette(sprite.palette_idx);
-            let _ = frame.draw_sprite(&self.chr_rom, &sprite, palette);
+            frame.draw_sprite(&self.chr_rom, &sprite, palette);
         }
     }
 
@@ -633,56 +629,57 @@ mod tests {
     fn test_palette_for_bg_tile() {
         let mut ppu = new_test_ppu();
 
-        // All of the reads in the next group (x in 0..=3, y in 0..=3) map to this part of vram
-        // This is the 0th index in the attribute table
-        let attr_table_start = 1024 - 64;
-        ppu.vram[attr_table_start] = 0b00011011;
+        for nametable in [0, 1] {
+            let nt_size = 1024;
+            let nt_start: usize = nametable * nt_size;
+            // All of the reads in the next group (x in 0..=3, y in 0..=3) map to this part of vram
+            // This is the 0th index in the attribute table
+            let attr_table_start = nt_start + nt_size - 64;
+            ppu.vram[attr_table_start] = 0b00011011;
 
-        assert_eq!(ppu.palette_for_bg_tile((0, 0)), PaletteIdx(3));
-        assert_eq!(ppu.palette_for_bg_tile((1, 0)), PaletteIdx(3));
-        assert_eq!(ppu.palette_for_bg_tile((0, 1)), PaletteIdx(3));
-        assert_eq!(ppu.palette_for_bg_tile((1, 1)), PaletteIdx(3));
-
-        assert_eq!(ppu.palette_for_bg_tile((2, 0)), PaletteIdx(2));
-        assert_eq!(ppu.palette_for_bg_tile((3, 0)), PaletteIdx(2));
-        assert_eq!(ppu.palette_for_bg_tile((2, 1)), PaletteIdx(2));
-        assert_eq!(ppu.palette_for_bg_tile((3, 1)), PaletteIdx(2));
-
-        assert_eq!(ppu.palette_for_bg_tile((0, 2)), PaletteIdx(1));
-        assert_eq!(ppu.palette_for_bg_tile((1, 3)), PaletteIdx(1));
-        assert_eq!(ppu.palette_for_bg_tile((0, 2)), PaletteIdx(1));
-        assert_eq!(ppu.palette_for_bg_tile((1, 3)), PaletteIdx(1));
-
-        assert_eq!(ppu.palette_for_bg_tile((2, 2)), PaletteIdx(0));
-        assert_eq!(ppu.palette_for_bg_tile((3, 3)), PaletteIdx(0));
-        assert_eq!(ppu.palette_for_bg_tile((2, 2)), PaletteIdx(0));
-        assert_eq!(ppu.palette_for_bg_tile((3, 3)), PaletteIdx(0));
-
-        ppu.vram[attr_table_start + 1] = 0b11111111;
-        for x in 4..=7 {
-            for y in 0..=3 {
-                assert_eq!(ppu.palette_for_bg_tile((x, y)), PaletteIdx(3));
+            let nt_start = 0;
+            for coords in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                assert_eq!(ppu.palette_for_bg_tile(coords, nt_start), PaletteIdx(3));
             }
-        }
 
-        ppu.vram[attr_table_start + 2] = 0b01010101;
-        for x in 8..=11 {
-            for y in 0..=3 {
-                assert_eq!(ppu.palette_for_bg_tile((x, y)), PaletteIdx(1));
+            for coords in [(2, 0), (3, 0), (2, 1), (3, 1)] {
+                assert_eq!(ppu.palette_for_bg_tile(coords, nt_start), PaletteIdx(2));
             }
-        }
 
-        ppu.vram[attr_table_start + 7] = 0b10101010;
-        for x in 28..=31 {
-            for y in 0..=3 {
-                assert_eq!(ppu.palette_for_bg_tile((x, y)), PaletteIdx(2));
+            for coords in [(0, 2), (1, 3), (0, 2), (1, 3)] {
+                assert_eq!(ppu.palette_for_bg_tile(coords, nt_start), PaletteIdx(1));
             }
-        }
 
-        ppu.vram[attr_table_start + 9] = 0b10101010;
-        for x in 4..=7 {
-            for y in 4..=7 {
-                assert_eq!(ppu.palette_for_bg_tile((x, y)), PaletteIdx(2));
+            for coords in [(2, 2), (3, 3), (2, 2), (3, 3)] {
+                assert_eq!(ppu.palette_for_bg_tile(coords, nt_start), PaletteIdx(0));
+            }
+
+            ppu.vram[attr_table_start + 1] = 0b11111111;
+            for x in 4..=7 {
+                for y in 0..=3 {
+                    assert_eq!(ppu.palette_for_bg_tile((x, y), nt_start), PaletteIdx(3));
+                }
+            }
+
+            ppu.vram[attr_table_start + 2] = 0b01010101;
+            for x in 8..=11 {
+                for y in 0..=3 {
+                    assert_eq!(ppu.palette_for_bg_tile((x, y), nt_start), PaletteIdx(1));
+                }
+            }
+
+            ppu.vram[attr_table_start + 7] = 0b10101010;
+            for x in 28..=31 {
+                for y in 0..=3 {
+                    assert_eq!(ppu.palette_for_bg_tile((x, y), nt_start), PaletteIdx(2));
+                }
+            }
+
+            ppu.vram[attr_table_start + 9] = 0b10101010;
+            for x in 4..=7 {
+                for y in 4..=7 {
+                    assert_eq!(ppu.palette_for_bg_tile((x, y), nt_start), PaletteIdx(2));
+                }
             }
         }
     }
