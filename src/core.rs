@@ -296,7 +296,7 @@ impl<'a, 'b: 'a> Cpu<'a> {
     {
         // This simulates the wait time for the PPU to start
         // TODO: I really hope this isn't it but could this cause problems for pacman.nes?
-        self.tick(7);
+        // self.tick(7);
 
         loop {
             if self.bus.poll_nmi_interrupt() {
@@ -1754,15 +1754,15 @@ mod tests {
             result.push(cpu.trace());
         });
         assert_eq!(
-            "0064  A2 01     LDX #$01                        A:01 X:02 Y:03 P:24 SP:FD PPU:  0, 21 CYC:7",
+            "0064  A2 01     LDX #$01                        A:01 X:02 Y:03 P:24 SP:FD PPU:  0,  0 CYC:0",
             result[0]
         );
         assert_eq!(
-            "0066  CA        DEX                             A:01 X:01 Y:03 P:24 SP:FD PPU:  0, 27 CYC:9",
+            "0066  CA        DEX                             A:01 X:01 Y:03 P:24 SP:FD PPU:  0,  6 CYC:2",
             result[1]
         );
         assert_eq!(
-            "0067  88        DEY                             A:01 X:00 Y:03 P:26 SP:FD PPU:  0, 33 CYC:11",
+            "0067  88        DEY                             A:01 X:00 Y:03 P:26 SP:FD PPU:  0, 12 CYC:4",
             result[2]
         );
     }
@@ -1791,7 +1791,7 @@ mod tests {
             result.push(cpu.trace());
         });
         assert_eq!(
-            "0064  11 33     ORA ($33),Y = 0400 @ 0400 = AA  A:00 X:00 Y:00 P:24 SP:FD PPU:  0, 21 CYC:7",
+            "0064  11 33     ORA ($33),Y = 0400 @ 0400 = AA  A:00 X:00 Y:00 P:24 SP:FD PPU:  0,  0 CYC:0",
             result[0]
         );
     }
@@ -1806,6 +1806,9 @@ mod tests {
         let mut cpu = Cpu::new();
         cpu.load_rom(Rom::new(&program));
         cpu.reset();
+
+        cpu.tick(7);
+
         cpu.pc = 0xC000; // TODO: fix this hacky workaround for nestest
 
         // execute it until crash, collecting trace data

@@ -1,5 +1,6 @@
-- [ ] Figure out why sprites aren't drawing
-  - sprite mask not set correctly?
+- [x] Figure out why sprites aren't drawing
+  - wasn't writing to OAM DMA correctly
+- [ ] Why are some sprites flipped around?
 - [ ] Try an external debugger and setting breakpts
 - [ ] Debugger view
   - show both pattern tables beside the UI
