@@ -1,9 +1,7 @@
 # APU - Audio Processing Unit
 
-
-
-
 Rust libs:
+
 - synthesis, has osc for common wavs.. will it work well to generate one for each register?
 https://docs.rs/twang/latest/twang/
 - SDL2 can play sounds
@@ -11,8 +9,9 @@ https://docs.rs/twang/latest/twang/
   - can play multiple sounds with mixer:
     - https://rust-sdl2.github.io/rust-sdl2/sdl2/mixer/index.html
     - usage ex: https://github.com/Rust-SDL2/rust-sdl2/blob/master/examples/mixer-demo.rs
+  - https://nicktasios.nl/posts/making-sounds-using-sdl-and-visualizing-them-on-a-simulated-oscilloscope.html
 
-Combing wave forms:
+Combining wave forms:
 https://0xc45.com/blog/digital-audio-synthesizer-in-rust/
 
 Other synthesizer examples:

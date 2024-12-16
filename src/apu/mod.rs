@@ -14,11 +14,16 @@ pub struct Apu {
     dmc: [u8; 4],
     status: u8,
     frame_counter: u8,
+
+    cpu_cycles: usize,
+    is_between_apu_cycle: bool,
 }
 
 impl Apu {
     pub fn new() -> Self {
         Self {
+            // TODO: Pulse2 differs from Pulse1 slightly.
+            // Known diff is how in APU sweep "Calculating the target period"
             pulse1: PulseRegister::new(),
             pulse2: PulseRegister::new(),
             triangle: [0; 4],
@@ -26,6 +31,18 @@ impl Apu {
             dmc: [0; 4],
             status: 0,
             frame_counter: 0,
+
+            cpu_cycles: 0,
+            is_between_apu_cycle: false,
+        }
+    }
+
+    /// tick tracks CPU cycles. APU cycles occur every 2 CPU cycles
+    pub fn tick_cpu_cycles(&mut self, cycles: usize) {
+        for _ in 0..cycles {
+            self.cpu_cycles += 1;
+            // or just cpu_cycles %2
+            self.is_between_apu_cycle = !self.is_between_apu_cycle
         }
     }
 }

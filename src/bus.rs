@@ -52,6 +52,8 @@ impl<'a> Bus<'a> {
         if should_rerender {
             (self.gameloop_callback)(&self.ppu, &mut self.gamepad1, &mut self.gamepad2)
         }
+
+        self.apu.tick_cpu_cycles(cycles);
     }
 
     pub fn poll_nmi_interrupt(&mut self) -> bool {
