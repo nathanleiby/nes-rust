@@ -20,6 +20,7 @@ const TILE_SIZE_PIXELS: usize = 8;
 pub fn get_tile(pattern_table: &[u8], tile_n: usize) -> [[u8; 8]; 8] {
     let mut out = [[0; 8]; 8];
 
+    #[allow(clippy::needless_range_loop)]
     for row in 0..TILE_SIZE_PIXELS {
         let first_byte_idx = tile_n * TILE_SIZE_BYTES + row;
         let first_byte = pattern_table[first_byte_idx];
@@ -66,7 +67,7 @@ impl Frame {
         pos: (usize, usize),
         palette: [u8; 4],
     ) {
-        let tile = get_tile(&pattern_table, tile_n);
+        let tile = get_tile(pattern_table, tile_n);
         let (tile_x, tile_y) = pos;
         for (row, row_data) in tile.iter().enumerate() {
             for (col, &palette_idx) in row_data.iter().enumerate() {
@@ -90,7 +91,7 @@ impl Frame {
         let pt_idx = if sprite.use_pattern_table_1 { 1 } else { 0 };
         let pattern_table =
             &chr_rom[pt_idx * PATTERN_TABLE_SIZE..(pt_idx + 1) * PATTERN_TABLE_SIZE];
-        let tile = get_tile(&pattern_table, tile_n);
+        let tile = get_tile(pattern_table, tile_n);
 
         // Draw the tile
         let x = sprite.x as usize;

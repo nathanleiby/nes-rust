@@ -1,3 +1,5 @@
+alias cc := code_coverage
+
 run:
     cargo run
 
@@ -16,8 +18,15 @@ build:
 test:
     cargo test
 
-test_watch:
-    git ls-files | entr just test
+test_watch_all:
+    git ls-files | entr cargo test
+
+test_watch TEST:
+    git ls-files | entr cargo test {{TEST}}::tests
+
+
+code_coverage:
+    cargo tarpaulin -o html
 
 nestest:
     NESTEST_HACK=1 cargo run roms/nestest.nes > myout.log

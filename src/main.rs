@@ -6,6 +6,7 @@ use std::fs;
 use std::process::exit;
 
 mod addr_register;
+mod apu;
 mod bus;
 mod core;
 mod gamepad;

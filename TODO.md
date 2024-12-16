@@ -1,5 +1,9 @@
 - [x] Figure out why sprites aren't drawing
   - wasn't writing to OAM DMA correctly
+- [ ] try out code coverage
+  https://github.com/xd009642/tarpaulin
+  https://medium.com/@gnanaganesh/robust-rust-how-code-coverage-powers-rust-software-quality-417ef3ac2360
+  https://blog.balthazar-rouberol.com/measuring-the-coverage-of-a-rust-program-in-github-actions
 - [ ] Why are some sprites flipped around?
 - [ ] Try an external debugger and setting breakpts
 - [ ] Debugger view
