@@ -1,4 +1,4 @@
-use crate::{core::Mem, gamepad::GamepadRegister, ppu::Ppu, rom::Rom};
+use crate::{apu::Apu, core::Mem, gamepad::GamepadRegister, ppu::Ppu, rom::Rom};
 
 const RAM: u16 = 0x0000;
 const RAM_MIRROR_END: u16 = 0x2000;
@@ -13,6 +13,7 @@ pub struct Bus<'call> {
     cpu_vram: [u8; 0x800], // 2048
     rom: Rom,
     ppu: Ppu,
+    apu: Apu,
     gamepad1: GamepadRegister,
     gamepad2: GamepadRegister,
     cycles: usize,
@@ -30,11 +31,13 @@ impl<'a> Bus<'a> {
         F: FnMut(&Ppu, &mut GamepadRegister, &mut GamepadRegister) + 'call + 'a,
     {
         let ppu = Ppu::new(rom.chr_rom.clone(), rom.mirroring);
+        let apu = Apu::new();
 
         Bus {
             cpu_vram: [0; 0x800],
             rom,
             ppu,
+            apu,
             cycles: 0,
             gamepad1: GamepadRegister::new(),
             gamepad2: GamepadRegister::new(),
@@ -97,7 +100,7 @@ impl Mem for Bus<'_> {
             0x4014 => {
                 panic!("attempt to read from write-only PPU register: 0x4014 (OAMDMA - Sprite DMA)")
             }
-            0x4000..=0x4013 | 0x4015 => 0, // TODO: implement APU,
+            0x4000..=0x4013 | 0x4015 => self.apu.mem_read(addr),
             0x4016 => self.gamepad1.read(),
             0x4017 => self.gamepad2.read(),
             0x4018..0x4020 => 0, // APU and I/O functionality that is normally disabled
@@ -142,7 +145,7 @@ impl Mem for Bus<'_> {
 
                 // TODO: Eventually figure out what CPU cycles need to be added for OAM DMA write
             }
-            0x4000..=0x4013 | 0x4015 => (), // TODO: implement APU,
+            0x4000..=0x4013 | 0x4015 => self.apu.mem_write(addr, data),
             0x4016 => self.gamepad1.write(data),
             0x4017 => self.gamepad2.write(data),
             0x4018..0x4020 => (), // APU and I/O functionality that is normally disabled

@@ -81,13 +81,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "attempt to read from write only APU register")]
-    fn test_apu_invalid_mem_read_panics() {
-        let mut apu = Apu::new();
-        _ = apu.mem_read(0x4000);
-    }
-
-    #[test]
     fn test_apu_mem_read_status() {
         let mut apu = Apu::new();
         let data = apu.mem_read(0x4015);
@@ -96,5 +89,26 @@ mod tests {
         apu.status = 123;
         let data = apu.mem_read(0x4015);
         assert_eq!(data, 123);
+    }
+
+    #[test]
+    #[should_panic(expected = "attempt to read from write only APU register")]
+    fn test_apu_invalid_mem_read_of_read_only_register_panics() {
+        let mut apu = Apu::new();
+        _ = apu.mem_read(0x4000);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid lookup")]
+    fn test_apu_out_of_bounds_mem_read_panics() {
+        let mut apu = Apu::new();
+        _ = apu.mem_read(0x4000 - 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid lookup")]
+    fn test_apu_out_of_bounds_mem_write_panics() {
+        let mut apu = Apu::new();
+        apu.mem_write(0x4000 - 1, 0);
     }
 }

@@ -1,4 +1,6 @@
 alias cc := code_coverage
+alias pc := pre_commit
+alias t := test_all
 
 run:
     cargo run
@@ -15,20 +17,19 @@ lint_fix:
 build:
     cargo build
 
-test:
+test_all:
     cargo test
 
-test_watch_all:
-    git ls-files | entr cargo test
+test TEST:
+    cargo test {{TEST}}
 
 test_watch TEST:
-    git ls-files | entr cargo test {{TEST}}::tests
-
+    git ls-files | entr cargo test {{TEST}}
 
 code_coverage:
-    cargo tarpaulin -o html
+    cargo tarpaulin -o html && open tarpaulin-report.html
 
 nestest:
     NESTEST_HACK=1 cargo run roms/nestest.nes > myout.log
 
-pre_commit: lint test build
+pre_commit: lint test_all build
