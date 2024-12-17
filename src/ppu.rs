@@ -27,6 +27,7 @@ pub struct PpuRegisters {
 /// Size of Pattern Table aka Chr Rom (in bytes)
 pub const PATTERN_TABLE_SIZE: usize = 4096;
 
+const PALETTE_TABLE_SIZE: usize = 32;
 /// Ppu (Picture Processing Unit)
 /// https://www.nesdev.org/wiki/PPU_memory_map
 pub struct Ppu {
@@ -50,7 +51,7 @@ pub struct Ppu {
 
     /// Palette Table
     /// Backgrounds and sprites each have 4 palettes of 4 colors located at $3F00-$3F1F in VRAM
-    palette_table: [u8; 32],
+    palette_table: [u8; PALETTE_TABLE_SIZE],
     oam_data: [u8; 256],
 
     mirroring: Mirroring,
@@ -404,14 +405,15 @@ impl Ppu {
         }
     }
 
-    fn mirror_palettes_addr(&mut self, addr: u16) -> u16 {
-        match addr {
-            // Note that entry 0 of each palette is also unique in that its color value is shared between the background and sprite palettes, so writing to either one updates the same internal storage.
+    pub fn mirror_palettes_addr(&self, addr: u16) -> u16 {
+        let out = match addr {
+            // Entry 0 of each palette is shared between the background and sprite palettes,
             // This means that the backdrop color can be written through both $3F00 and $3F10.
-            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => addr - 0x3F00 - 0x0010,
-            0x3f00..=0x3fff => addr - 0x3F00,
-            _ => panic!("invald palettes addr: {:04X}", addr),
-        }
+            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => addr - 0x0010,
+            0x3f00..=0x3fff => addr,
+            _ => panic!("invalid palettes addr: {:04X}", addr),
+        };
+        out % (PALETTE_TABLE_SIZE as u16)
     }
 
     pub fn write_to_oam_data(&mut self, data: u8) {
@@ -784,5 +786,22 @@ mod tests {
             ppu.parse_sprite_from_oam_data(&[2, 0b0001_0000, 0b1010_0011, 1]),
             expected
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid palettes addr")]
+    fn test_mirror_palettes_addr_invalid_input() {
+        let ppu = new_test_ppu();
+
+        assert_eq!(ppu.mirror_palettes_addr(0), 0);
+    }
+
+    #[test]
+    fn test_mirror_palettes_addr() {
+        let ppu = new_test_ppu();
+
+        assert_eq!(ppu.mirror_palettes_addr(0x3F04), 4);
+        assert_eq!(ppu.mirror_palettes_addr(0x3F10), 0);
+        assert_eq!(ppu.mirror_palettes_addr(0x3F20), 0);
     }
 }
