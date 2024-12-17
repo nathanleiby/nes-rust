@@ -81,6 +81,7 @@ impl Mem for Bus<'_> {
     fn mem_peek(&self, addr: u16) -> u8 {
         match addr {
             RAM..RAM_MIRROR_END => {
+                // 0x800; // total size of vram (0x800 = 2024)
                 let a = addr & 0b1110_0111_1111_1111;
                 self.cpu_vram[a as usize]
             }

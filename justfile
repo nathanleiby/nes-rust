@@ -3,8 +3,8 @@ alias pc := pre_commit
 alias t := test_all
 alias tw := test_watch_all
 
-run:
-    cargo run
+run ROM:
+    cargo run {{ROM}}
 
 run_with_trace ROM:
     RUST_BACKTRACE=1 CPU_TRACE=1 cargo run {{ROM}}

@@ -1,7 +1,10 @@
-- [ ] Add scrolling support
 - [ ] Bug: Why are some sprites flipped around?
   - afaict it's a bug with drawing or tile lookup, not with flip horiz / flip vertical
+- [ ] Add scrolling support
 - [..] Add tests cases for PPU registers
+- [ ] Add support for 2 gamepads
+- [ ] Separate the core from the specific hardware (screen, input)
+  - [ ] Try replacing screen and input with macroquad
 - [ ] Integrate code coverage into CI. (maybe add a repo tag in README)
   https://github.com/xd009642/tarpaulin
   https://medium.com/@gnanaganesh/robust-rust-how-code-coverage-powers-rust-software-quality-417ef3ac2360
@@ -24,12 +27,6 @@
       - log the details
       - highlight which pattern is being used
     - show state of CPU (same idea as "trace")
-  - Is there a way to get a nice trace that doesn't manipulate registers which cause side effects of READ operations?
-    - consider a non-mut mem_peek() fn, that's safe in debugging/tracing
-    - Right now, running a trace causes a program to fail
-      I wrote a `tracelite` operation to explore this.
-      I also modified `trace` to skip the address lookups, and this was usable enough for debugging (but broke some hard-coding in tests).
-    - PR upstream: Explain in the book that trace() needs to be deactivated (if it does) due to side-effects of READ ops
 - [ ] More NES Test roms
   - Try running more NES Test roms, maybe they can help now that i have some graphics?
   - Lots of the PPU test rom links here are broken.. https://www.nesdev.org/wiki/Emulator_tests
