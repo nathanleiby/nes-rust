@@ -169,4 +169,68 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn test_draw_sprite() {
+        let mut pattern_table = [0; PATTERN_TABLE_SIZE];
+        let tile_n = 1;
+        for i in 0..8 {
+            pattern_table[(tile_n * TILE_SIZE_BYTES) + i] = 0xff;
+            pattern_table[(tile_n * TILE_SIZE_BYTES) + i + 8] = 0xff;
+        }
+
+        let pos = (3, 0);
+        let palette = [65, 65, 65, 3]; // 65 should crash if read, since it's OOB the palette with 64 colors
+
+        let mut f = Frame::new();
+        let sprite = Sprite {
+            tile_idx: 1,
+            // *8 to convert from an (x,y) to a (tile_x, tile_y)
+            x: pos.0 * 8,
+            y: pos.1 * 8,
+            ..Default::default()
+        };
+        f.draw_sprite(&pattern_table, &sprite, palette);
+
+        // verify we drew the entire tile in the one selected color
+        for row in 0..8 {
+            for col in 0..8 {
+                let pixels_per_row = 32 * 8;
+                let rows = (pos.1 as usize) + row;
+                let cols = (pos.0 as usize) * 8 + col;
+                let start = (pixels_per_row * rows + cols) * 3;
+
+                let color = (0x44, 0x00, 0x96);
+                assert_eq!(f.data[start], color.0);
+                assert_eq!(f.data[start + 1], color.1);
+                assert_eq!(f.data[start + 2], color.2);
+            }
+        }
+    }
+
+    #[test]
+    fn test_draw_sprite_behind_background() {
+        let mut pattern_table = [0; PATTERN_TABLE_SIZE];
+        let tile_n = 1;
+        for i in 0..8 {
+            pattern_table[(tile_n * TILE_SIZE_BYTES) + i] = 0xff;
+            pattern_table[(tile_n * TILE_SIZE_BYTES) + i + 8] = 0xff;
+        }
+
+        let palette = [65, 65, 65, 3]; // 65 should crash if read, since it's OOB the palette with 64 colors
+
+        for behind_background in [true, false] {
+            let mut f = Frame::new();
+            let sprite = Sprite {
+                tile_idx: 1,
+                behind_background,
+                ..Default::default()
+            };
+            f.draw_sprite(&pattern_table, &sprite, palette);
+
+            // we don't draw anything if sprite is behind background
+            // the actual desired behavior is more complex, with transparent  transparent tiles allowed
+            assert_eq!(f.data.iter().all(|&x| x == 0), behind_background);
+        }
+    }
 }
