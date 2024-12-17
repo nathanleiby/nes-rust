@@ -271,12 +271,6 @@ impl<'a, 'b: 'a> Cpu<'a> {
     // MAIN
     //
 
-    // TODO: This is used in a test right now
-    #[allow(dead_code)]
-    pub fn load_rom(&mut self, rom: Rom) {
-        self.set_bus(Bus::new(rom));
-    }
-
     // Test Helpers
 
     fn _load_test_rom(&mut self, program: Vec<u8>) {
@@ -1831,7 +1825,8 @@ mod tests {
         let program = fs::read("roms/nestest.nes").unwrap();
 
         let mut cpu = Cpu::new();
-        cpu.load_rom(Rom::new(&program));
+        let rom = Rom::new(&program);
+        cpu.set_bus(Bus::new(rom));
         cpu.reset();
 
         cpu.tick(7);
