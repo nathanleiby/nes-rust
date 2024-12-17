@@ -28,6 +28,11 @@ pub struct PpuRegisters {
 pub const PATTERN_TABLE_SIZE: usize = 4096;
 
 const PALETTE_TABLE_SIZE: usize = 32;
+
+/// Each scanline lasts for 341 clock cycles
+/// Only 256 of these are visible, the others overflow the screen horizontally
+const CYCLES_PER_SCANLINE: usize = 341;
+
 /// Ppu (Picture Processing Unit)
 /// https://www.nesdev.org/wiki/PPU_memory_map
 pub struct Ppu {
@@ -260,8 +265,7 @@ impl Ppu {
         let mut should_rerender = false;
 
         self.clock_cycles += cycles;
-        // each scanline lasts for 341 PPU clock cycles
-        let scanline = self.clock_cycles / 341;
+        let scanline = self.clock_cycles / CYCLES_PER_SCANLINE;
 
         if self.is_sprite_0_hit() {
             self.registers
@@ -302,7 +306,7 @@ impl Ppu {
                 .remove(StatusRegister::SPRITE_0_HIT_FLAG);
         }
 
-        self.clock_cycles %= 262 * 341;
+        self.clock_cycles %= 262 * CYCLES_PER_SCANLINE;
         self.scanline = scanline % 262;
 
         should_rerender
@@ -473,7 +477,8 @@ impl Ppu {
         let sprite0 = self.parse_sprite_from_oam_data(&self.oam_data[0..4]);
         let (scanline_y, scanline_x) = self.get_tick_status();
 
-        return scanline_y >= sprite0.y as usize && (scanline_x % 341) >= sprite0.x as usize;
+        return scanline_y >= sprite0.y as usize
+            && (scanline_x % CYCLES_PER_SCANLINE) >= sprite0.x as usize;
     }
 }
 
@@ -632,18 +637,18 @@ mod tests {
             .insert(ControlRegister::VBLANK_NMI_ENABLE);
         assert!(ppu.is_vblank_nmi_enabled());
 
-        ppu.tick(341);
-        assert_eq!(ppu.get_tick_status(), (1, 341));
+        ppu.tick(CYCLES_PER_SCANLINE);
+        assert_eq!(ppu.get_tick_status(), (1, CYCLES_PER_SCANLINE));
         assert!(!get_ppu_vblank_status(&mut ppu));
 
-        let should_rerender = ppu.tick(240 * 341);
-        assert_eq!(ppu.get_tick_status(), (241, 241 * 341));
+        let should_rerender = ppu.tick(240 * CYCLES_PER_SCANLINE);
+        assert_eq!(ppu.get_tick_status(), (241, 241 * CYCLES_PER_SCANLINE));
         assert!(should_rerender);
         assert!(ppu.poll_nmi_interrupt().is_some());
         assert!(ppu.poll_nmi_interrupt().is_none());
         assert!(get_ppu_vblank_status(&mut ppu));
 
-        let should_rerender = ppu.tick(21 * 341);
+        let should_rerender = ppu.tick(21 * CYCLES_PER_SCANLINE);
         assert_eq!(
             ppu.get_tick_status(),
             (0, 0),
@@ -840,11 +845,11 @@ mod tests {
 
         ppu.oam_data[0] = 3; // sprite 0's y
         assert_eq!(ppu.is_sprite_0_hit(), false);
-        ppu.tick(341);
+        ppu.tick(CYCLES_PER_SCANLINE);
         assert_eq!(ppu.is_sprite_0_hit(), false);
-        ppu.tick(341);
+        ppu.tick(CYCLES_PER_SCANLINE);
         assert_eq!(ppu.is_sprite_0_hit(), false);
-        ppu.tick(341);
+        ppu.tick(CYCLES_PER_SCANLINE);
         assert_eq!(ppu.is_sprite_0_hit(), true);
 
         ppu.oam_data[3] = 5; // sprite 0's x
