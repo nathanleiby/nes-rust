@@ -542,15 +542,11 @@ struct PpuScrollRegister {
 
 #[cfg(test)]
 mod tests {
-    use crate::{assert_eq_bits, rom::Rom};
+    use crate::{assert_eq_bits, assert_eq_hex, rom::Rom};
 
     use super::*;
 
-    // #[test]
-    // fn test_addr_and_data_register() {
-    //     todo!()
-    // }
-
+    // Test helpers
     fn get_ppu_vblank_status(ppu: &mut Ppu) -> bool {
         ppu.registers.status.contains(StatusRegister::VBLANK_FLAG)
     }
@@ -558,6 +554,34 @@ mod tests {
     fn new_test_ppu() -> Ppu {
         let rom = Rom::new_test_rom(vec![]);
         Ppu::new(rom.chr_rom.clone(), rom.mirroring)
+    }
+
+    // Tests
+    #[test]
+    fn test_addr_and_data_register() {
+        let mut ppu = new_test_ppu();
+
+        assert_eq!(ppu.registers.address.get(), 0);
+        ppu.write_to_addr(0x01);
+        assert_eq_hex!(ppu.registers.address.get(), 0x0100);
+        ppu.write_to_addr(0x02);
+        assert_eq_hex!(ppu.registers.address.get(), 0x0102);
+
+        // make sure it mirrors down
+        ppu.write_to_addr(0xFF);
+        assert_eq_hex!(ppu.registers.address.get(), 0x3F02);
+
+        ppu.write_to_data(22);
+        assert_eq!(ppu.palette_table[0x02], 22);
+
+        ppu.write_to_data(33);
+        assert_eq!(ppu.palette_table[0x03], 33);
+
+        ppu.palette_table[0x04] = 44;
+        ppu.palette_table[0x05] = 55;
+        assert_eq!(ppu.read_from_data(), 0); // first read goes into the read buffer
+        assert_eq!(ppu.read_from_data(), 44);
+        assert_eq!(ppu.read_from_data(), 55);
     }
 
     #[test]
