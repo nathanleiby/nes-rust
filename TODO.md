@@ -1,11 +1,10 @@
 - [ ] Why are some sprites flipped around?
 - [x] Figure out why sprites aren't drawing
   - wasn't writing to OAM DMA correctly
-- [x] try out code coverage
+- [ ] integrate code coverage into CI. (maybe add a repo tag in README)
   https://github.com/xd009642/tarpaulin
   https://medium.com/@gnanaganesh/robust-rust-how-code-coverage-powers-rust-software-quality-417ef3ac2360
   https://blog.balthazar-rouberol.com/measuring-the-coverage-of-a-rust-program-in-github-actions
-- [ ] integrate code coverage into CI
 - [ ] migrate to bitfields (from bitflags)
   - https://docs.rs/bilge/latest/bilge/
   - https://gitlab.com/SmartAcoustics/sparrow/-/blob/master/sparrow-bitpacker/src/bitfields.rs

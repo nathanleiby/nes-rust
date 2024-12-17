@@ -366,6 +366,7 @@ pub fn addressing_mode_to_size(mode: &AddressingMode) -> u16 {
     }
 }
 
+/// Checks if the OpCode is an official instruction from the 6502, or is part of the NES's extended set of "unofficial" operations.
 pub fn is_official(code: u8) -> bool {
     let (name, _, _) = lookup_opcode(code);
     match name {
