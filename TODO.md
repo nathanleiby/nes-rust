@@ -1,5 +1,3 @@
-- [ ] Bug: Why are some sprites flipped around?
-  - afaict it's a bug with drawing or tile lookup, not with flip horiz / flip vertical
 - [ ] Add scrolling support
 - [..] Add tests cases for PPU registers
 - [ ] Add support for 2 gamepads

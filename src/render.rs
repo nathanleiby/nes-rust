@@ -3,9 +3,8 @@ use crate::{
     ppu::{Sprite, PATTERN_TABLE_SIZE},
 };
 
-pub struct Frame {
-    pub data: Vec<u8>,
-}
+/// Debug flags
+const DEBUG_DRAW_SPRITE_BOUNDING_BOX: bool = false;
 
 /// Size of a single 8x8 Tile (in bytes).
 /// 2 bytes for each row of 8 pixels.
@@ -37,6 +36,10 @@ pub fn get_tile(pattern_table: &[u8], tile_n: usize) -> [[u8; 8]; 8] {
     }
 
     out
+}
+
+pub struct Frame {
+    pub data: Vec<u8>,
 }
 
 impl Frame {
@@ -96,23 +99,43 @@ impl Frame {
         // Draw the tile
         let x = sprite.x as usize;
         let y = sprite.y as usize;
-        let v_range = if sprite.flip_vertical {
-            (0..TILE_SIZE_PIXELS).rev().collect::<Vec<usize>>()
-        } else {
-            (0..TILE_SIZE_PIXELS).collect::<Vec<usize>>()
-        };
-        for row in v_range {
-            let h_range = if sprite.flip_horizontal {
-                (0..TILE_SIZE_PIXELS).rev().collect::<Vec<usize>>()
-            } else {
-                (0..TILE_SIZE_PIXELS).collect::<Vec<usize>>()
-            };
-            for col in h_range {
+        #[allow(clippy::needless_range_loop)]
+        for row in 0..TILE_SIZE_PIXELS {
+            for col in 0..TILE_SIZE_PIXELS {
                 // 0 means transparent, for sprites
                 let palette_idx = tile[row][col];
                 if palette_idx > 0 {
                     let color = SYSTEM_PALETTE[palette[palette_idx as usize] as usize];
-                    self.set_pixel(x + col, y + row, color);
+
+                    let y_offset = match sprite.flip_vertical {
+                        true => TILE_SIZE_PIXELS - row - 1,
+                        false => row,
+                    };
+                    let x_offset = match sprite.flip_horizontal {
+                        true => TILE_SIZE_PIXELS - col - 1,
+                        false => col,
+                    };
+                    self.set_pixel(x + x_offset, y + y_offset, color);
+                }
+
+                if DEBUG_DRAW_SPRITE_BOUNDING_BOX {
+                    // Debug sprite by drawing a bounding box
+                    if col == 0
+                        || row == 0
+                        || col == TILE_SIZE_PIXELS - 1
+                        || row == TILE_SIZE_PIXELS - 1
+                    {
+                        // default = red
+                        // flip v = yellow
+                        // flip h = purple
+                        // flip v+h = white
+                        let color = (
+                            255,
+                            if sprite.flip_vertical { 255 } else { 0 },
+                            if sprite.flip_horizontal { 255 } else { 0 },
+                        );
+                        self.set_pixel(x + col, y + row, color);
+                    }
                 }
             }
         }
