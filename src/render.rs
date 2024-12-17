@@ -118,3 +118,55 @@ impl Frame {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_draw_bg_tile_default_color() {
+        // draw a tile 0 in the top-left with default background color
+        let pattern_table = [0; PATTERN_TABLE_SIZE];
+        let tile_n = 0;
+        let pos = (0, 0);
+        let palette = [0, 0, 0, 0];
+
+        let mut f = Frame::new();
+        assert_eq!(f.data[0], 0);
+        f.draw_bg_tile(&pattern_table, tile_n, pos, palette);
+        assert_eq!(f.data[0], 128);
+        assert_eq!(f.data[1], 128);
+        assert_eq!(f.data[2], 128);
+    }
+
+    #[test]
+    fn test_draw_bg_tile_single_color_lookup() {
+        let mut pattern_table = [0; PATTERN_TABLE_SIZE];
+        let tile_n = 1;
+        for i in 0..8 {
+            pattern_table[(tile_n * TILE_SIZE_BYTES) + i] = 0xff;
+            pattern_table[(tile_n * TILE_SIZE_BYTES) + i + 8] = 0xff;
+        }
+
+        let pos = (3, 0);
+        let palette = [65, 65, 65, 3]; // 65 should crash if read, since it's OOB the palette with 64 colors
+
+        let mut f = Frame::new();
+        f.draw_bg_tile(&pattern_table, tile_n, pos, palette);
+
+        // verify we drew the entire tile in the one selected color
+        for row in 0..8 {
+            for col in 0..8 {
+                let pixels_per_row = 32 * 8;
+                let rows = pos.1 + row;
+                let cols = pos.0 * 8 + col;
+                let start = (pixels_per_row * rows + cols) * 3;
+
+                let color = (0x44, 0x00, 0x96);
+                assert_eq!(f.data[start], color.0);
+                assert_eq!(f.data[start + 1], color.1);
+                assert_eq!(f.data[start + 2], color.2);
+            }
+        }
+    }
+}
