@@ -34,6 +34,16 @@ impl GamepadRegister {
     }
 
     // returns the state of one button
+    pub fn peek(&self) -> u8 {
+        if self.current_idx > 7 {
+            1
+        } else {
+            let is_current_button_pressed = self.button_status.bits() & (1 << self.current_idx) > 0;
+            is_current_button_pressed as u8
+        }
+    }
+
+    // returns the state of one button and updates to next button
     pub fn read(&mut self) -> u8 {
         if self.current_idx > 7 {
             1

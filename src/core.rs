@@ -74,6 +74,15 @@ const DEFAULT_STACK_POINTER: u8 = 0xfd;
 const DEFAULT_STATUS: u8 = 0b100100;
 
 pub trait Mem {
+    fn mem_peek(&self, addr: u16) -> u8;
+
+    fn mem_peek_u16(&self, addr: u16) -> u16 {
+        // NES CPU uses Little-Endian addressing
+        let lo = self.mem_peek(addr);
+        let hi = self.mem_peek(addr + 1);
+        (hi as u16) << 8 | lo as u16
+    }
+
     fn mem_read(&mut self, addr: u16) -> u8;
 
     fn mem_write(&mut self, addr: u16, val: u8);
@@ -96,6 +105,15 @@ pub trait Mem {
 }
 
 impl Mem for Cpu<'_> {
+    /// Peek is non-mutating version of Read.
+    ///
+    /// Because peek is called on all addresses when tracing,
+    /// by convention if it is used on a write-only register,
+    /// we return 0
+    fn mem_peek(&self, addr: u16) -> u8 {
+        self.bus.mem_peek(addr)
+    }
+
     fn mem_read(&mut self, addr: u16) -> u8 {
         self.bus.mem_read(addr)
     }
@@ -921,15 +939,25 @@ impl<'a, 'b: 'a> Cpu<'a> {
         )
     }
 
-    pub fn trace(&mut self) -> String {
+    fn mem_peek_zero_page_wrapping(&self, ptr: u8) -> (u16, bool) {
+        let lo = self.mem_peek(ptr as u16);
+        let (hi_ptr, is_page_crossed) = ptr.overflowing_add(1);
+        let hi = self.mem_peek(hi_ptr as u16);
+
+        let result = (hi as u16) << 8 | (lo as u16);
+
+        (result, is_page_crossed)
+    }
+
+    pub fn trace(&self) -> String {
         // C000  4C F5 C5  JMP $C5F5                       A:00 X:00 Y:00 P:24 SP:FD PPU:  0, 21 CYC:7
 
         let cpu_cycles = self.cycles;
         let (ppu_frame, ppu_cycles) = self.bus.get_ppu_tick_status();
 
-        let code = self.mem_read(self.pc);
-        let param1 = self.mem_read(self.pc + 1);
-        let param2 = self.mem_read(self.pc + 2);
+        let code = self.mem_peek(self.pc);
+        let param1 = self.mem_peek(self.pc + 1);
+        let param2 = self.mem_peek(self.pc + 2);
 
         //// Address syntax by mode looks like:
 
@@ -938,20 +966,19 @@ impl<'a, 'b: 'a> Cpu<'a> {
         let size = addressing_mode_to_size(&mode);
 
         let tla = format!("{}{}", if is_official(code) { "" } else { "*" }, name);
-        // let addr_block = format!("<OMITTED> ({:04X}) ({:04X})", param1, param2);
         let addr_block = match mode {
             AddressingMode::Immediate => format!("#${:02X}", param1),
             AddressingMode::ZeroPage => {
-                format!("${:02X} = {:02X}", param1, self.mem_read(param1 as u16))
+                format!("${:02X} = {:02X}", param1, self.mem_peek(param1 as u16))
             }
             AddressingMode::ZeroPageX => {
                 let offset = param1.wrapping_add(self.x);
-                let data = self.mem_read(offset as u16);
+                let data = self.mem_peek(offset as u16);
                 format!("${:02X},X @ {:02X} = {:02X}", param1, offset, data)
             }
             AddressingMode::ZeroPageY => {
                 let offset = param1.wrapping_add(self.y);
-                let data = self.mem_read(offset as u16);
+                let data = self.mem_peek(offset as u16);
                 format!("${:02X},Y @ {:02X} = {:02X}", param1, offset, data)
             }
             AddressingMode::Absolute => {
@@ -963,13 +990,13 @@ impl<'a, 'b: 'a> Cpu<'a> {
                         "${:02X}{:02X} = {:02X}",
                         param2,
                         param1,
-                        self.mem_read(addr)
+                        self.mem_peek(addr)
                     ),
                 }
             }
             AddressingMode::AbsoluteX => {
                 let addr = addr_from(param1, param2).wrapping_add(self.x as u16);
-                let data = self.mem_read(addr);
+                let data = self.mem_peek(addr);
                 format!(
                     "${:02X}{:02X},X @ {:04X} = {:02X}",
                     param2, param1, addr, data
@@ -977,7 +1004,7 @@ impl<'a, 'b: 'a> Cpu<'a> {
             }
             AddressingMode::AbsoluteY => {
                 let addr = addr_from(param1, param2).wrapping_add(self.y as u16);
-                let data = self.mem_read(addr);
+                let data = self.mem_peek(addr);
                 format!(
                     "${:02X}{:02X},Y @ {:04X} = {:02X}",
                     param2, param1, addr, data
@@ -985,8 +1012,8 @@ impl<'a, 'b: 'a> Cpu<'a> {
             }
             AddressingMode::IndirectX => {
                 let indexed = param1.wrapping_add(self.x);
-                let (indirect, _) = self.mem_read_zero_page_wrapping(indexed);
-                let data = self.mem_read(indirect);
+                let (indirect, _) = self.mem_peek_zero_page_wrapping(indexed);
+                let data = self.mem_peek(indirect);
 
                 format!(
                     "(${:02X},X) @ {:02X} = {:04X} = {:02X}",
@@ -994,9 +1021,9 @@ impl<'a, 'b: 'a> Cpu<'a> {
                 )
             }
             AddressingMode::IndirectY => {
-                let (indirect, _) = self.mem_read_zero_page_wrapping(param1);
+                let (indirect, _) = self.mem_peek_zero_page_wrapping(param1);
                 let indexed = indirect.wrapping_add(self.y as u16);
-                let data = self.mem_read(indexed);
+                let data = self.mem_peek(indexed);
                 format!(
                     "(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
                     param1, indirect, indexed, data
@@ -1013,17 +1040,17 @@ impl<'a, 'b: 'a> Cpu<'a> {
                 // Copied from get_operand_address.
                 // TODO: Figure out how to share things better here, given pc is off by 1
                 let indirect = {
-                    let base = self.mem_read_u16(self.pc + 1);
+                    let base = self.mem_peek_u16(self.pc + 1);
 
                     let is_edge_of_page = base & 0x00ff == 0xff;
 
                     if is_edge_of_page {
-                        let first = self.mem_read(base);
+                        let first = self.mem_peek(base);
                         // Intentionally wrap incorrectly, to recreate buggy behavior from original 6502
-                        let second = self.mem_read(base & 0xff00);
+                        let second = self.mem_peek(base & 0xff00);
                         ((second as u16) << 8) + first as u16
                     } else {
-                        self.mem_read_u16(base)
+                        self.mem_peek_u16(base)
                     }
                 };
 

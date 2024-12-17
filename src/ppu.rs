@@ -350,19 +350,22 @@ impl Ppu {
     }
 
     pub fn read_from_data(&mut self) -> u8 {
-        let addr = self.registers.address.get();
-        self.increment_vram_addr();
+        let val = self.peek_data();
 
-        let val = match addr {
+        self.increment_vram_addr();
+        let out = self.read_data_buffer;
+        self.read_data_buffer = val;
+        out
+    }
+
+    pub fn peek_data(&self) -> u8 {
+        let addr = self.registers.address.get();
+        match addr {
             0..0x2000 => self.chr_rom[addr as usize],
             0x2000..0x3F00 => self.vram[self.mirror_vram_addr(addr) as usize],
             0x3F00..0x4000 => self.palette_table[self.mirror_palettes_addr(addr) as usize],
             0x4000..=0xFFFF => todo!("doesn't yet handle the mirrors range (addr={:04X})", addr),
-        };
-
-        let out = self.read_data_buffer;
-        self.read_data_buffer = val;
-        out
+        }
     }
 
     pub fn write_to_data(&mut self, data: u8) {
@@ -416,7 +419,7 @@ impl Ppu {
         self.registers.oam_address = self.registers.oam_address.wrapping_add(1);
     }
 
-    pub fn read_from_oam_data(&mut self) -> u8 {
+    pub fn read_from_oam_data(&self) -> u8 {
         self.oam_data[self.registers.oam_address as usize]
     }
 
@@ -425,7 +428,7 @@ impl Ppu {
     }
 
     pub fn read_from_status(&mut self) -> u8 {
-        let result = self.registers.status.bits();
+        let result = self.peek_status();
 
         // Reading this register has the side effect of clearing the PPU's internal w register.
         // It is commonly read before writes to PPUSCROLL and PPUADDR to ensure the writes occur in the correct order.
@@ -435,6 +438,10 @@ impl Ppu {
         self.set_ppu_vblank_status(false);
 
         result
+    }
+
+    pub fn peek_status(&self) -> u8 {
+        self.registers.status.bits()
     }
 
     fn reset_latch(&mut self) {

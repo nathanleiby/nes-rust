@@ -6,6 +6,9 @@ alias tw := test_watch_all
 run:
     cargo run
 
+run_with_trace ROM:
+    RUST_BACKTRACE=1 CPU_TRACE=1 cargo run {{ROM}}
+
 lint:
     cargo clippy --all --all-features --tests -- -D warnings
 

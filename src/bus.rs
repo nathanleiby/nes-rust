@@ -78,6 +78,40 @@ impl<'a> Bus<'a> {
 }
 
 impl Mem for Bus<'_> {
+    fn mem_peek(&self, addr: u16) -> u8 {
+        match addr {
+            RAM..RAM_MIRROR_END => {
+                let a = addr & 0b1110_0111_1111_1111;
+                self.cpu_vram[a as usize]
+            }
+            PPU..PPU_MIRROR_END => {
+                // The PPU exposes 8 registers. They are mirrored every 8 bytes in this range.
+                let register_idx = addr % 8;
+                match register_idx {
+                    // 0 | 1 | 3 | 5 | 6 => panic!(
+                    //     "attempt to read from write-only PPU register: 0x200{}",
+                    //     register_idx
+                    // ),
+                    0 | 1 | 3 | 5 | 6 => 0,
+                    2 => self.ppu.peek_status(),
+                    4 => self.ppu.read_from_oam_data(),
+                    7 => self.ppu.peek_data(),
+                    8..=u16::MAX => panic!("invalid PPU register IDX: {}", register_idx),
+                }
+            }
+            0x4014 => {
+                // panic!("attempt to read from write-only PPU register: 0x4014 (OAMDMA - Sprite DMA)")
+                0
+            }
+            0x4000..=0x4013 | 0x4015 => self.apu.mem_peek(addr),
+            0x4016 => self.gamepad1.peek(),
+            0x4017 => self.gamepad2.peek(),
+            0x4018..0x4020 => 0, // APU and I/O functionality that is normally disabled
+            0x4020..0x8000 => 0, // available for cartridge use
+            PRG_ROM_START..=PRG_ROM_END => self.read_prg_rom(addr),
+        }
+    }
+
     fn mem_read(&mut self, addr: u16) -> u8 {
         match addr {
             RAM..RAM_MIRROR_END => {
@@ -92,7 +126,6 @@ impl Mem for Bus<'_> {
                         "attempt to read from write-only PPU register: 0x200{}",
                         register_idx
                     ),
-                    // 0 | 1 | 3 | 5 | 6 => 0, // TODO
                     2 => self.ppu.read_from_status(),
                     4 => self.ppu.read_from_oam_data(),
                     7 => self.ppu.read_from_data(),

@@ -4,5 +4,7 @@
 # code coverage report
 tarpaulin-report.html
 
+roms/local/
+
 # mac OS files
 .DS_Store

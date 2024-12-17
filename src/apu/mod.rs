@@ -54,6 +54,18 @@ impl Apu {
 // ];
 
 impl Mem for Apu {
+    fn mem_peek(&self, addr: u16) -> u8 {
+        match addr {
+            // 0x4000..=0x4013 | 0x4017 => panic!(
+            //     "attempt to read from write only APU register: 0x{:04X}",
+            //     addr
+            // ),
+            0x4000..=0x4013 | 0x4017 => 0,
+            0x04015 => self.status,
+            _ => panic!("invalid lookup: 0x{:04X} is not in APU memory map", addr),
+        }
+    }
+
     fn mem_read(&mut self, addr: u16) -> u8 {
         match addr {
             0x4000..=0x4013 | 0x4017 => panic!(
