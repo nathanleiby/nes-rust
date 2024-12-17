@@ -477,8 +477,8 @@ impl Ppu {
         let sprite0 = self.parse_sprite_from_oam_data(&self.oam_data[0..4]);
         let (scanline_y, scanline_x) = self.get_tick_status();
 
-        return scanline_y >= sprite0.y as usize
-            && (scanline_x % CYCLES_PER_SCANLINE) >= sprite0.x as usize;
+        scanline_y >= sprite0.y as usize
+            && (scanline_x % CYCLES_PER_SCANLINE) >= sprite0.x as usize
     }
 }
 
@@ -839,24 +839,24 @@ mod tests {
     fn test_is_sprite_0_hit() {
         let mut ppu = new_test_ppu();
 
-        assert_eq!(ppu.is_sprite_0_hit(), false);
+        assert!(!ppu.is_sprite_0_hit());
         ppu.registers.mask.insert(MaskRegister::SHOW_SPRITES);
-        assert_eq!(ppu.is_sprite_0_hit(), true);
+        assert!(ppu.is_sprite_0_hit());
 
         ppu.oam_data[0] = 3; // sprite 0's y
-        assert_eq!(ppu.is_sprite_0_hit(), false);
+        assert!(!ppu.is_sprite_0_hit());
         ppu.tick(CYCLES_PER_SCANLINE);
-        assert_eq!(ppu.is_sprite_0_hit(), false);
+        assert!(!ppu.is_sprite_0_hit());
         ppu.tick(CYCLES_PER_SCANLINE);
-        assert_eq!(ppu.is_sprite_0_hit(), false);
+        assert!(!ppu.is_sprite_0_hit());
         ppu.tick(CYCLES_PER_SCANLINE);
-        assert_eq!(ppu.is_sprite_0_hit(), true);
+        assert!(ppu.is_sprite_0_hit());
 
         ppu.oam_data[3] = 5; // sprite 0's x
-        assert_eq!(ppu.is_sprite_0_hit(), false);
+        assert!(!ppu.is_sprite_0_hit());
         ppu.tick(4);
-        assert_eq!(ppu.is_sprite_0_hit(), false);
+        assert!(!ppu.is_sprite_0_hit());
         ppu.tick(1);
-        assert_eq!(ppu.is_sprite_0_hit(), true);
+        assert!(ppu.is_sprite_0_hit());
     }
 }
