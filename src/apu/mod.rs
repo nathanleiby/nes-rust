@@ -41,7 +41,7 @@ impl Apu {
     pub fn tick_cpu_cycles(&mut self, cycles: usize) {
         for _ in 0..cycles {
             self.cpu_cycles += 1;
-            // or just cpu_cycles %2
+            // or just `cpu_cycles %2`
             self.is_between_apu_cycle = !self.is_between_apu_cycle
         }
     }
