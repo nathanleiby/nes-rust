@@ -263,6 +263,12 @@ impl Ppu {
         // each scanline lasts for 341 PPU clock cycles
         let scanline = self.clock_cycles / 341;
 
+        if self.is_sprite_0_hit() {
+            self.registers
+                .status
+                .insert(StatusRegister::SPRITE_0_HIT_FLAG);
+        }
+
         if self.scanline < 241 && scanline >= 241 {
             // upon entering scanline 241, PPU triggers NMI interrupt
             if self.is_vblank_nmi_enabled() {
@@ -271,6 +277,7 @@ impl Ppu {
             // The VBlank flag of the PPU is set at tick 1 (the second tick) of scanline 241
             // Here we are approximating that by clearing on dot 0 or above.
             self.set_ppu_vblank_status(true);
+
             // TODO
             // self.registers
             //     .status
@@ -280,14 +287,19 @@ impl Ppu {
 
         // the PPU renders 262 scan lines per frame
         if self.scanline < 262 && scanline >= 262 {
-            // If the vblank flag is not cleared by reading, it will be cleared automatically on dot 1 of the prerender scanline.
-            // Here we are approximating that by clearing on dot 0 or above.
-            self.set_ppu_vblank_status(false);
             self.nmi_interrupt = None;
-            // TODO
-            // self.registers
-            //     .status
-            //     .remove(StatusRegister::SPRITE_0_HIT_FLAG);
+
+            // The VBlank, Sprite Overflow, and Sprite 0 Hit flags are all cleared automatically on dot 1 of the prerender scanline.
+            // Here we approximate that by clearing on dot 0 or above.
+            self.set_ppu_vblank_status(false);
+
+            self.registers
+                .status
+                .remove(StatusRegister::SPRITE_OVERFLOW_FLAG);
+
+            self.registers
+                .status
+                .remove(StatusRegister::SPRITE_0_HIT_FLAG);
         }
 
         self.clock_cycles %= 262 * 341;
@@ -449,6 +461,19 @@ impl Ppu {
     fn reset_latch(&mut self) {
         self.registers.address.reset_latch();
         self.registers.scroll.is_y_scroll = false;
+    }
+
+    /// Hacky approach to seeing if sprite 0 is hit.
+    /// We don't actully check for non-transparent pixels, we simply check if the scanline has passed the sprite's top-left
+    fn is_sprite_0_hit(&self) -> bool {
+        if !self.registers.mask.contains(MaskRegister::SHOW_SPRITES) {
+            return false;
+        }
+
+        let sprite0 = self.parse_sprite_from_oam_data(&self.oam_data[0..4]);
+        let (scanline_y, scanline_x) = self.get_tick_status();
+
+        return scanline_y >= sprite0.y as usize && (scanline_x % 341) >= sprite0.x as usize;
     }
 }
 
@@ -803,5 +828,30 @@ mod tests {
         assert_eq!(ppu.mirror_palettes_addr(0x3F04), 4);
         assert_eq!(ppu.mirror_palettes_addr(0x3F10), 0);
         assert_eq!(ppu.mirror_palettes_addr(0x3F20), 0);
+    }
+
+    #[test]
+    fn test_is_sprite_0_hit() {
+        let mut ppu = new_test_ppu();
+
+        assert_eq!(ppu.is_sprite_0_hit(), false);
+        ppu.registers.mask.insert(MaskRegister::SHOW_SPRITES);
+        assert_eq!(ppu.is_sprite_0_hit(), true);
+
+        ppu.oam_data[0] = 3; // sprite 0's y
+        assert_eq!(ppu.is_sprite_0_hit(), false);
+        ppu.tick(341);
+        assert_eq!(ppu.is_sprite_0_hit(), false);
+        ppu.tick(341);
+        assert_eq!(ppu.is_sprite_0_hit(), false);
+        ppu.tick(341);
+        assert_eq!(ppu.is_sprite_0_hit(), true);
+
+        ppu.oam_data[3] = 5; // sprite 0's x
+        assert_eq!(ppu.is_sprite_0_hit(), false);
+        ppu.tick(4);
+        assert_eq!(ppu.is_sprite_0_hit(), false);
+        ppu.tick(1);
+        assert_eq!(ppu.is_sprite_0_hit(), true);
     }
 }
