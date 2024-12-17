@@ -1,6 +1,7 @@
 alias cc := code_coverage
 alias pc := pre_commit
 alias t := test_all
+alias tw := test_watch_all
 
 run:
     cargo run
@@ -19,6 +20,9 @@ build:
 
 test_all:
     cargo test
+
+test_watch_all:
+    git ls-files | entr cargo test
 
 test TEST:
     cargo test {{TEST}}
