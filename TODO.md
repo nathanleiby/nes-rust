@@ -1,6 +1,14 @@
-- [ ] Add scrolling support
-- [..] Add tests cases for PPU registers
+- [ ] Bug: gamepad input not detected in Mario
 - [ ] Add support for 2 gamepads
+- [..] Add scrolling support
+  - [x] horizontal scrolling (vertical mirroring)
+  - [ ] vertical scrolling (horizontal mirroring) -- working on it via Galaga
+- [ ] Implement mappers
+  - [ ] iNES Mapper 1 = MMC1
+    - SNROM - e.g. [Metroid](https://nescartdb.com/profile/view/224/metroid), [Final Fantasy](https://nescartdb.com/profile/view/154/final-fantasy)
+  - [ ] iNES Mapper 2
+    - UNROM - [Mega Man](https://nescartdb.com/profile/view/608/mega-man)
+- [..] Add tests cases for PPU registers
 - [ ] Separate the core from the specific hardware (screen, input)
   - [ ] Try replacing screen and input with macroquad
 - [ ] Integrate code coverage into CI. (maybe add a repo tag in README)
@@ -25,6 +33,8 @@
       - log the details
       - highlight which pattern is being used
     - show state of CPU (same idea as "trace")
+    - inspiration:
+      - https://www.reddit.com/r/EmuDev/comments/1hh4gr6/my_nes_emulator_debugger/
 - [ ] More NES Test roms
   - Try running more NES Test roms, maybe they can help now that i have some graphics?
   - Lots of the PPU test rom links here are broken.. https://www.nesdev.org/wiki/Emulator_tests

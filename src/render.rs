@@ -5,6 +5,7 @@ use crate::{
 
 /// Debug flags
 const DEBUG_DRAW_SPRITE_BOUNDING_BOX: bool = false;
+// const DEBUG_DRAW_SPRITE_BOUNDING_BOX: bool = true;
 
 /// Size of a single 8x8 Tile (in bytes).
 /// 2 bytes for each row of 8 pixels.
@@ -70,7 +71,7 @@ impl Frame {
         tile_n: usize,
         pos: (usize, usize),
         x_scroll: usize,
-        // y_scroll: usize,
+        y_scroll: usize,
         palette: [u8; 4],
     ) {
         let tile = get_tile(pattern_table, tile_n);
@@ -79,13 +80,14 @@ impl Frame {
             for (col, &palette_idx) in row_data.iter().enumerate() {
                 let color = SYSTEM_PALETTE[palette[palette_idx as usize] as usize];
                 let left_x = (tile_x * TILE_SIZE_PIXELS) + col;
-                // only draw pixels within the screen width
-                if x_scroll <= left_x && left_x - x_scroll <= 256 {
-                    self.set_pixel(
-                        (tile_x * TILE_SIZE_PIXELS) + col - x_scroll,
-                        (tile_y * TILE_SIZE_PIXELS) + row,
-                        color,
-                    );
+                let top_y = (tile_y * TILE_SIZE_PIXELS) + row;
+                // only draw pixels within the screen's viewport
+                if x_scroll <= left_x
+                    && left_x - x_scroll <= Frame::WIDTH
+                    && y_scroll <= top_y
+                    && top_y - y_scroll <= Frame::HEIGHT
+                {
+                    self.set_pixel(left_x - x_scroll, top_y - y_scroll, color);
                 }
             }
         }
@@ -127,19 +129,25 @@ impl Frame {
 
                 if DEBUG_DRAW_SPRITE_BOUNDING_BOX {
                     // Debug sprite by drawing a bounding box
-                    if col == 0
-                        || row == 0
-                        || col == TILE_SIZE_PIXELS - 1
-                        || row == TILE_SIZE_PIXELS - 1
-                    {
+                    let horiz_edge = row == 0 || row == TILE_SIZE_PIXELS - 1;
+                    let vert_edge = col == 0 || col == TILE_SIZE_PIXELS - 1;
+                    if horiz_edge || vert_edge {
                         // default = red
                         // flip v = yellow
                         // flip h = purple
                         // flip v+h = white
                         let color = (
                             255,
-                            if sprite.flip_vertical { 255 } else { 0 },
-                            if sprite.flip_horizontal { 255 } else { 0 },
+                            if sprite.flip_vertical && vert_edge {
+                                255
+                            } else {
+                                0
+                            },
+                            if sprite.flip_horizontal && horiz_edge {
+                                255
+                            } else {
+                                0
+                            },
                         );
                         self.set_pixel(x + col, y + row, color);
                     }
@@ -163,7 +171,7 @@ mod test {
 
         let mut f = Frame::new();
         assert_eq!(f.data[0], 0);
-        f.draw_bg_tile(&pattern_table, tile_n, pos, 0, palette);
+        f.draw_bg_tile(&pattern_table, tile_n, pos, 0, 0, palette);
         assert_eq!(f.data[0], 128);
         assert_eq!(f.data[1], 128);
         assert_eq!(f.data[2], 128);
@@ -182,7 +190,7 @@ mod test {
         let palette = [65, 65, 65, 3]; // 65 should crash if read, since it's OOB the palette with 64 colors
 
         let mut f = Frame::new();
-        f.draw_bg_tile(&pattern_table, tile_n, pos, 0, palette);
+        f.draw_bg_tile(&pattern_table, tile_n, pos, 0, 0, palette);
 
         // verify we drew the entire tile in the one selected color
         for row in 0..8 {

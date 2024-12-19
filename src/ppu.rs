@@ -156,38 +156,8 @@ impl Ppu {
         PaletteIdx(palette_idx)
     }
 
-    pub fn draw_background(&self, frame: &mut Frame) {
-        let bank = self.get_background_pattern_bank();
-        let pattern_table =
-            &self.chr_rom[bank * PATTERN_TABLE_SIZE..(bank + 1) * PATTERN_TABLE_SIZE];
-
-        // TODO: Investigate...
-        // Selecting a nametable here causes a temporarily black screen
-        // at at the start of pacman (vs nametable = 0).
-        // However, with nametable = 0 there's another bug of wrong colors at start.
-        // Both resolve to correct screen in 1-2 seconds.
-        let which_nametable = self
-            .registers
-            .control
-            .intersection(ControlRegister::NAMETABLE)
-            .bits() as usize;
-        assert!(which_nametable <= 3);
-        let nt_start = which_nametable * 0x400;
-
-        let rows = 30;
-        let cols = 32;
-        for y in 0..rows {
-            for x in 0..cols {
-                let offset = y * cols + x;
-                let tile_n = self.vram[self.mirror_vram_addr((nt_start + offset) as u16) as usize];
-                let bgp_idx = self.palette_for_bg_tile((x, y), nt_start);
-                let palette = self.lookup_palette(bgp_idx);
-                frame.draw_bg_tile(pattern_table, tile_n as usize, (x, y), 0, palette);
-            }
-        }
-    }
-
-    /// Draws the entire possible background of 2 frames, but it gets filtered within, which you can then filter by applying a windowed viewport
+    /// Draws the entire possible background of 2 frames, but it gets filtered within
+    /// draw_bg_tile to only pixels on the actual screen
     pub fn draw_scrollable_background(&self, frame: &mut Frame) {
         let bank = self.get_background_pattern_bank();
         let pattern_table =
@@ -202,42 +172,74 @@ impl Ppu {
         assert!(which_nametable <= 3);
         let nt_start = which_nametable * 0x400;
 
-        // self.registers.control.
+        let TILE_ROWS = 30;
+        let TILE_COLS = 32;
+        match self.mirroring {
+            Mirroring::Vertical => {
+                let x_scroll: usize = self.registers.scroll.x_scroll as usize;
+                // TODO: explore 8th bit of scroll
+                // if self.registers.control.contains(ControlRegister::X_SCROLL) {
+                //     x_scroll += 256;
+                // }
 
-        // Determine which nametable is on the left
-        let nts = if nt_start == 0 {
-            [0, 0x400]
-        } else {
-            [0x400, 0x800]
-        };
+                // Determine which nametable is on the left
+                let nts = if nt_start == 0 {
+                    [0, 0x400]
+                } else {
+                    [0x400, 0x800]
+                };
 
-        let x_scroll: usize = self.registers.scroll.x_scroll as usize;
-        let y_scroll: usize = self.registers.scroll.y_scroll as usize;
-        // TODO
-        // if self.registers.control.contains(ControlRegister::X_SCROLL) {
-        //     x_scroll += 256;
-        // }
-
-        let rows = 30;
-        let cols = 32;
-        for tile_y in 0..rows {
-            for (nt_idx, &nt_start) in nts.iter().enumerate() {
-                for tile_x in 0..cols {
-                    let offset = tile_y * cols + tile_x;
-                    let tile_n =
-                        self.vram[self.mirror_vram_addr((nt_start + offset) as u16) as usize];
-                    let bgp_idx = self.palette_for_bg_tile((tile_x, tile_y), nt_start);
-                    let palette = self.lookup_palette(bgp_idx);
-                    frame.draw_bg_tile(
-                        pattern_table,
-                        tile_n as usize,
-                        (tile_x + cols * (nt_idx), tile_y),
-                        x_scroll,
-                        palette,
-                    );
+                for tile_y in 0..TILE_ROWS {
+                    for (nt_idx, &nt_start) in nts.iter().enumerate() {
+                        for tile_x in 0..TILE_COLS {
+                            let offset = tile_y * TILE_COLS + tile_x;
+                            let tile_n = self.vram
+                                [self.mirror_vram_addr((nt_start + offset) as u16) as usize];
+                            let bgp_idx = self.palette_for_bg_tile((tile_x, tile_y), nt_start);
+                            let palette = self.lookup_palette(bgp_idx);
+                            frame.draw_bg_tile(
+                                pattern_table,
+                                tile_n as usize,
+                                (tile_x + TILE_COLS * nt_idx, tile_y),
+                                x_scroll,
+                                0,
+                                palette,
+                            );
+                        }
+                    }
                 }
             }
-        }
+            Mirroring::Horizontal => {
+                let y_scroll: usize = self.registers.scroll.y_scroll as usize;
+                // Determine which nametable is above
+                let nts = if nt_start == 0 {
+                    [0, 0x800]
+                } else {
+                    [0x800, 0]
+                };
+
+                for tile_y in 0..TILE_ROWS {
+                    for (nt_idx, &nt_start) in nts.iter().enumerate() {
+                        for tile_x in 0..TILE_COLS {
+                            let offset = tile_y * TILE_COLS + tile_x;
+                            let tile_n = self.vram
+                                [self.mirror_vram_addr((nt_start + offset) as u16) as usize];
+                            let bgp_idx = self.palette_for_bg_tile((tile_x, tile_y), nt_start);
+                            let palette = self.lookup_palette(bgp_idx);
+                            frame.draw_bg_tile(
+                                pattern_table,
+                                tile_n as usize,
+                                (tile_x, tile_y + TILE_ROWS * nt_idx),
+                                0,
+                                y_scroll,
+                                palette,
+                            );
+                        }
+                    }
+                }
+            }
+            _ => todo!("other mirroring"),
+        };
     }
 
     /// Determine which CHR ROM bank (Pattern Table) is used for background tiles
