@@ -83,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         move |ppu: &Ppu, gamepad1: &mut GamepadRegister, _gamepad2: &mut GamepadRegister| {
             // compute the screen's content from the PPU
             let mut frame = Frame::new();
-            ppu.draw_background(&mut frame);
+            ppu.draw_scrollable_background(&mut frame);
             ppu.draw_sprites(&mut frame);
 
             // redraw the screen

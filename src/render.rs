@@ -48,6 +48,7 @@ impl Frame {
 
     pub fn new() -> Self {
         Self {
+            // TODO: Consider a 'double-sized' frame with a viewport() function
             data: vec![0; Frame::WIDTH * Frame::HEIGHT * 3],
         }
     }
@@ -68,6 +69,8 @@ impl Frame {
         pattern_table: &[u8],
         tile_n: usize,
         pos: (usize, usize),
+        x_scroll: usize,
+        // y_scroll: usize,
         palette: [u8; 4],
     ) {
         let tile = get_tile(pattern_table, tile_n);
@@ -75,11 +78,15 @@ impl Frame {
         for (row, row_data) in tile.iter().enumerate() {
             for (col, &palette_idx) in row_data.iter().enumerate() {
                 let color = SYSTEM_PALETTE[palette[palette_idx as usize] as usize];
-                self.set_pixel(
-                    (tile_x * TILE_SIZE_PIXELS) + col,
-                    (tile_y * TILE_SIZE_PIXELS) + row,
-                    color,
-                );
+                let left_x = (tile_x * TILE_SIZE_PIXELS) + col;
+                // only draw pixels within the screen width
+                if x_scroll <= left_x && left_x - x_scroll <= 256 {
+                    self.set_pixel(
+                        (tile_x * TILE_SIZE_PIXELS) + col - x_scroll,
+                        (tile_y * TILE_SIZE_PIXELS) + row,
+                        color,
+                    );
+                }
             }
         }
     }
@@ -156,7 +163,7 @@ mod test {
 
         let mut f = Frame::new();
         assert_eq!(f.data[0], 0);
-        f.draw_bg_tile(&pattern_table, tile_n, pos, palette);
+        f.draw_bg_tile(&pattern_table, tile_n, pos, 0, palette);
         assert_eq!(f.data[0], 128);
         assert_eq!(f.data[1], 128);
         assert_eq!(f.data[2], 128);
@@ -175,7 +182,7 @@ mod test {
         let palette = [65, 65, 65, 3]; // 65 should crash if read, since it's OOB the palette with 64 colors
 
         let mut f = Frame::new();
-        f.draw_bg_tile(&pattern_table, tile_n, pos, palette);
+        f.draw_bg_tile(&pattern_table, tile_n, pos, 0, palette);
 
         // verify we drew the entire tile in the one selected color
         for row in 0..8 {

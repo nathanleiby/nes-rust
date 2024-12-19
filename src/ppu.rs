@@ -182,7 +182,60 @@ impl Ppu {
                 let tile_n = self.vram[self.mirror_vram_addr((nt_start + offset) as u16) as usize];
                 let bgp_idx = self.palette_for_bg_tile((x, y), nt_start);
                 let palette = self.lookup_palette(bgp_idx);
-                frame.draw_bg_tile(pattern_table, tile_n as usize, (x, y), palette);
+                frame.draw_bg_tile(pattern_table, tile_n as usize, (x, y), 0, palette);
+            }
+        }
+    }
+
+    /// Draws the entire possible background of 2 frames, but it gets filtered within, which you can then filter by applying a windowed viewport
+    pub fn draw_scrollable_background(&self, frame: &mut Frame) {
+        let bank = self.get_background_pattern_bank();
+        let pattern_table =
+            &self.chr_rom[bank * PATTERN_TABLE_SIZE..(bank + 1) * PATTERN_TABLE_SIZE];
+
+        // In horizontal scrolling, this is the nametable at the LEFT of the screen
+        let which_nametable = self
+            .registers
+            .control
+            .intersection(ControlRegister::NAMETABLE)
+            .bits() as usize;
+        assert!(which_nametable <= 3);
+        let nt_start = which_nametable * 0x400;
+
+        // self.registers.control.
+
+        // Determine which nametable is on the left
+        let nts = if nt_start == 0 {
+            [0, 0x400]
+        } else {
+            [0x400, 0x800]
+        };
+
+        let x_scroll: usize = self.registers.scroll.x_scroll as usize;
+        let y_scroll: usize = self.registers.scroll.y_scroll as usize;
+        // TODO
+        // if self.registers.control.contains(ControlRegister::X_SCROLL) {
+        //     x_scroll += 256;
+        // }
+
+        let rows = 30;
+        let cols = 32;
+        for tile_y in 0..rows {
+            for (nt_idx, &nt_start) in nts.iter().enumerate() {
+                for tile_x in 0..cols {
+                    let offset = tile_y * cols + tile_x;
+                    let tile_n =
+                        self.vram[self.mirror_vram_addr((nt_start + offset) as u16) as usize];
+                    let bgp_idx = self.palette_for_bg_tile((tile_x, tile_y), nt_start);
+                    let palette = self.lookup_palette(bgp_idx);
+                    frame.draw_bg_tile(
+                        pattern_table,
+                        tile_n as usize,
+                        (tile_x + cols * (nt_idx), tile_y),
+                        x_scroll,
+                        palette,
+                    );
+                }
             }
         }
     }
@@ -477,8 +530,7 @@ impl Ppu {
         let sprite0 = self.parse_sprite_from_oam_data(&self.oam_data[0..4]);
         let (scanline_y, scanline_x) = self.get_tick_status();
 
-        scanline_y >= sprite0.y as usize
-            && (scanline_x % CYCLES_PER_SCANLINE) >= sprite0.x as usize
+        scanline_y >= sprite0.y as usize && (scanline_x % CYCLES_PER_SCANLINE) >= sprite0.x as usize
     }
 }
 
