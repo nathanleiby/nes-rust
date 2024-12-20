@@ -1,4 +1,4 @@
-use core::Cpu;
+use cpu::Cpu;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
@@ -8,7 +8,7 @@ use std::process::exit;
 mod addr_register;
 mod apu;
 mod bus;
-mod core;
+mod cpu;
 mod gamepad;
 mod macros;
 mod ops;

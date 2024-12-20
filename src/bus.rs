@@ -1,4 +1,4 @@
-use crate::{apu::Apu, core::Mem, gamepad::GamepadRegister, ppu::Ppu, rom::Rom};
+use crate::{apu::Apu, cpu::Mem, gamepad::GamepadRegister, ppu::Ppu, rom::Rom};
 
 const RAM: u16 = 0x0000;
 const RAM_MIRROR_END: u16 = 0x2000;

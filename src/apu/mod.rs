@@ -1,6 +1,6 @@
 mod pulse_register;
 
-use crate::core::Mem;
+use crate::cpu::Mem;
 
 use pulse_register::PulseRegister;
 

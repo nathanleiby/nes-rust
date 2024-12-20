@@ -1,4 +1,4 @@
-use crate::core::CPU_START;
+use crate::cpu::CPU_START;
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub enum Mirroring {

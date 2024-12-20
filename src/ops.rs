@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::core::AddressingMode;
+use crate::cpu::AddressingMode;
 
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, PartialEq, Eq)]
