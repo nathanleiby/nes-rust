@@ -296,9 +296,6 @@ impl<'a, 'b: 'a> Cpu<'a> {
         self.y = 0;
         self.sp = DEFAULT_STACK_POINTER;
         self.pc = self.mem_read_u16(0xFFFC);
-        if env::var("NESTEST_HACK").is_ok() {
-            self.pc = 0xC000; // TODO: why is it saying 0xC004 normally when running nestest.nes ??
-        }
         self.status = DEFAULT_STATUS;
     }
 
@@ -306,10 +303,6 @@ impl<'a, 'b: 'a> Cpu<'a> {
     where
         F: FnMut(&mut Cpu),
     {
-        // This simulates the wait time for the PPU to start
-        // TODO: I really hope this isn't it but could this cause problems for pacman.nes?
-        // self.tick(7);
-
         loop {
             if self.bus.poll_nmi_interrupt() {
                 self.interrupt_nmi();
