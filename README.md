@@ -32,6 +32,13 @@ Priorities:
 - How games should look:
   - Donkey Kong 1: https://www.youtube.com/watch?v=p54nqmtK50Y&ab_channel=IGN
   - Pacman: https://www.youtube.com/watch?v=DxFjFS-idYk&ab_channel=WorldofLongplays
+- Nice blogs
+  - overview: https://leeteng.com/blog/content/writing-nes-emulator
+  - rendering: https://austinmorlan.com/posts/nes_rendering_overview/
+  - mappers: https://nesdoug.com/2019/10/02/22-advanced-mapper-mmc1/
+- other NES emus in rust:
+  - https://github.com/DaveTCode/nes-emulator-rust
+  - https://github.com/rib/nes-emulator
 
 ### Other interesting Tools
 

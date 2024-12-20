@@ -8,6 +8,8 @@
     - SNROM - e.g. [Metroid](https://nescartdb.com/profile/view/224/metroid), [Final Fantasy](https://nescartdb.com/profile/view/154/final-fantasy)
   - [ ] iNES Mapper 2
     - UNROM - [Mega Man](https://nescartdb.com/profile/view/608/mega-man)
+- [ ] Support Nes 2.0 roms
+  - https://www.nesdev.org/wiki/NES_2.0 vs https://www.nesdev.org/wiki/INES#Flags_7
 - [..] Add tests cases for PPU registers
 - [ ] Separate the core from the specific hardware (screen, input)
   - [ ] Try replacing screen and input with macroquad
@@ -21,6 +23,8 @@
   - https://github.com/wrenger/bitfield-struct-rs
   - https://github.com/gregorygaines/bitfields-rs
 - [ ] Debugger
+  - [ ] Build a tool that just inspects the ROM header (roughly want to see [kind of data here](https://nescartdb.com/profile/view/18/excitebike))
+    - how to manage multiple CLIs: https://stackoverflow.com/a/57630418/950683
   - allow requesting a to break at a given pc position (run until pc=X) or at a given OP (run until op=STA)
     - this would let me quickly inspect processor state to repair issues in nestest
     - this would help me not run too far when isolating an issue. in particular in my current PPU debugging
@@ -53,4 +57,5 @@
 - [ ] Extract "tileset viewer" subproject
   - CLI that you run and it pops up a view of the game's tilesets
 - [ ] Extract subproject: 6502 emulator .. as REPL?
+  - [ ] subject the 6502 processor to this test suite https://github.com/SingleStepTests/ProcessorTests/tree/main/nes6502
   - review emails/etc where I suggested other nice subprojects, too.
