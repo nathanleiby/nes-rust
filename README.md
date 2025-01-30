@@ -39,6 +39,8 @@ Priorities:
 - other NES emus in rust:
   - https://github.com/DaveTCode/nes-emulator-rust
   - https://github.com/rib/nes-emulator
+  - https://github.com/lukexor/tetanes
+  - https://github.com/Comba92/nen-emulator - lots of good linked docs, too
 
 ### Other interesting Tools
 

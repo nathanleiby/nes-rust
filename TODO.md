@@ -1,4 +1,4 @@
-- [ ] Bug: gamepad input not detected in Mario
+- [ ] Bug: gamepad input not detected in Mario -- what's up?
 - [ ] Add support for 2 gamepads
 - [..] Add scrolling support
   - [x] horizontal scrolling (vertical mirroring)
@@ -57,5 +57,6 @@
 - [ ] Extract "tileset viewer" subproject
   - CLI that you run and it pops up a view of the game's tilesets
 - [ ] Extract subproject: 6502 emulator .. as REPL?
+  - [ ] consider building in eframe, so i can reuse as debugger views within NES
   - [ ] subject the 6502 processor to this test suite https://github.com/SingleStepTests/ProcessorTests/tree/main/nes6502
   - review emails/etc where I suggested other nice subprojects, too.
