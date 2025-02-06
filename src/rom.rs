@@ -54,11 +54,7 @@ impl Rom {
         let hi = control_byte_2 & 0b1111_0000;
         let rom_mapper_type = hi + lo;
 
-        let mapper = match rom_mapper_type {
-            // 0 => Mapper::Zero,
-            // _ => todo!(),
-            _ => Mapper::Zero, // TODO: Hack to get tiles viewing.. but should revert to TODO. Why is mapper saying `0x40` (64) for some games even though it should be 0?
-        };
+        let mapper = Mapper::Zero;
 
         let mirroring = match (is_four_screen, is_vertical_screen) {
             (true, _) => Mirroring::FourScreen,
