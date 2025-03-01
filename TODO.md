@@ -1,4 +1,6 @@
 - [ ] Bug: gamepad input not detected in Mario -- what's up?
+  - Debugging: Add a debug overlay and then show buttons that are pressed
+  - Potentially an issue related to Sprite 0 behavior
 - [ ] Add support for 2 gamepads
 - [..] Add scrolling support
   - [x] horizontal scrolling (vertical mirroring)
@@ -14,9 +16,9 @@
 - [ ] Separate the core from the specific hardware (screen, input)
   - [ ] Try replacing screen and input with macroquad
 - [ ] Integrate code coverage into CI. (maybe add a repo tag in README)
-  https://github.com/xd009642/tarpaulin
-  https://medium.com/@gnanaganesh/robust-rust-how-code-coverage-powers-rust-software-quality-417ef3ac2360
-  https://blog.balthazar-rouberol.com/measuring-the-coverage-of-a-rust-program-in-github-actions
+      https://github.com/xd009642/tarpaulin
+      https://medium.com/@gnanaganesh/robust-rust-how-code-coverage-powers-rust-software-quality-417ef3ac2360
+      https://blog.balthazar-rouberol.com/measuring-the-coverage-of-a-rust-program-in-github-actions
 - [ ] Migrate to bitfields (from bitflags)
   - https://docs.rs/bilge/latest/bilge/
   - https://gitlab.com/SmartAcoustics/sparrow/-/blob/master/sparrow-bitpacker/src/bitfields.rs

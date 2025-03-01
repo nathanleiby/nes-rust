@@ -8,3 +8,6 @@ roms/local/
 
 # mac OS files
 .DS_Store
+
+# vscode extension
+.specstory/
