@@ -172,8 +172,8 @@ impl Ppu {
         assert!(which_nametable <= 3);
         let nt_start = which_nametable * 0x400;
 
-        let TILE_ROWS = 30;
-        let TILE_COLS = 32;
+        let tile_rows = 30;
+        let tile_cols = 32;
         match self.mirroring {
             Mirroring::Vertical => {
                 let x_scroll: usize = self.registers.scroll.x_scroll as usize;
@@ -189,10 +189,10 @@ impl Ppu {
                     [0x400, 0x800]
                 };
 
-                for tile_y in 0..TILE_ROWS {
+                for tile_y in 0..tile_rows {
                     for (nt_idx, &nt_start) in nts.iter().enumerate() {
-                        for tile_x in 0..TILE_COLS {
-                            let offset = tile_y * TILE_COLS + tile_x;
+                        for tile_x in 0..tile_cols {
+                            let offset = tile_y * tile_cols + tile_x;
                             let tile_n = self.vram
                                 [self.mirror_vram_addr((nt_start + offset) as u16) as usize];
                             let bgp_idx = self.palette_for_bg_tile((tile_x, tile_y), nt_start);
@@ -200,7 +200,7 @@ impl Ppu {
                             frame.draw_bg_tile(
                                 pattern_table,
                                 tile_n as usize,
-                                (tile_x + TILE_COLS * nt_idx, tile_y),
+                                (tile_x + tile_cols * nt_idx, tile_y),
                                 x_scroll,
                                 0,
                                 palette,
@@ -218,10 +218,10 @@ impl Ppu {
                     [0x800, 0]
                 };
 
-                for tile_y in 0..TILE_ROWS {
+                for tile_y in 0..tile_rows {
                     for (nt_idx, &nt_start) in nts.iter().enumerate() {
-                        for tile_x in 0..TILE_COLS {
-                            let offset = tile_y * TILE_COLS + tile_x;
+                        for tile_x in 0..tile_cols {
+                            let offset = tile_y * tile_cols + tile_x;
                             let tile_n = self.vram
                                 [self.mirror_vram_addr((nt_start + offset) as u16) as usize];
                             let bgp_idx = self.palette_for_bg_tile((tile_x, tile_y), nt_start);
@@ -229,7 +229,7 @@ impl Ppu {
                             frame.draw_bg_tile(
                                 pattern_table,
                                 tile_n as usize,
-                                (tile_x, tile_y + TILE_ROWS * nt_idx),
+                                (tile_x, tile_y + tile_rows * nt_idx),
                                 0,
                                 y_scroll,
                                 palette,

@@ -6,14 +6,14 @@ use bitfields::bitfield;
 struct PulseEnvelope {
     /// Duty Cycle
     #[bits(2)]
-    D: u8,
+    d: u8,
     /// Envelope loop / length counter halt
-    L: bool,
+    l: bool,
     /// Constant volume/envelope flag
-    C: bool,
+    c: bool,
     /// Volume/envelope divider period
     #[bits(4)]
-    V: u8,
+    v: u8,
 }
 
 /// PulseSweep
@@ -22,19 +22,19 @@ struct PulseEnvelope {
 // #[derive(Copy, Clone)] // Attributes are passed to the struct.
 struct PulseSweep {
     /// Enabled flag
-    E: bool,
+    e: bool,
     /// Period
     /// The divider's period is P + 1 half-frames
     #[bits(3)]
-    P: u8,
+    p: u8,
     /// Negate flag
     /// 0: add to period, sweeping toward lower frequencies
     /// 1: subtract from period, sweeping toward higher frequencies
-    N: bool,
+    n: bool,
     /// Shift count (number of bits).
     /// If SSS is 0, then behaves like E=0.
     #[bits(3)]
-    S: u8,
+    s: u8,
 }
 
 /// https://www.nesdev.org/wiki/APU_Pulse
@@ -56,38 +56,38 @@ impl PulseRegister {
     // data[0]
 
     fn duty_cycle(&self) -> u8 {
-        PulseEnvelope::from_bits(self.data[0]).D()
+        PulseEnvelope::from_bits(self.data[0]).d()
     }
 
     fn is_length_counter_halted(&self) -> bool {
-        PulseEnvelope::from_bits(self.data[0]).L()
+        PulseEnvelope::from_bits(self.data[0]).l()
     }
 
     fn is_constant_volume(&self) -> bool {
-        PulseEnvelope::from_bits(self.data[0]).C()
+        PulseEnvelope::from_bits(self.data[0]).c()
     }
 
     fn envelope_period(&self) -> u8 {
-        PulseEnvelope::from_bits(self.data[0]).V()
+        PulseEnvelope::from_bits(self.data[0]).v()
     }
 
     // data[1]
 
     fn is_sweep_enabled(&self) -> bool {
         let s = PulseSweep::from_bits(self.data[1]);
-        s.E() && s.S() > 0
+        s.e() && s.s() > 0
     }
 
     fn is_sweep_negated(&self) -> bool {
-        PulseSweep::from_bits(self.data[1]).N()
+        PulseSweep::from_bits(self.data[1]).n()
     }
 
     fn sweep_period(&self) -> u8 {
-        PulseSweep::from_bits(self.data[1]).P()
+        PulseSweep::from_bits(self.data[1]).p()
     }
 
     fn sweep_shift_count(&self) -> u8 {
-        PulseSweep::from_bits(self.data[1]).S()
+        PulseSweep::from_bits(self.data[1]).s()
     }
 
     // data[2] and data[3]

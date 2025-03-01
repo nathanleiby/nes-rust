@@ -1,4 +1,3 @@
-
 use crate::{
     bus::Bus,
     ops::{addressing_mode_to_size, is_official, lookup_opcode, OpName},
@@ -1861,5 +1860,27 @@ mod tests {
                 current,
             );
         }
+    }
+
+    #[test]
+    fn test_stack_push_pop() {
+        let mut cpu = Cpu::new();
+
+        cpu.stack_push(0x12);
+        cpu.stack_push(0x34);
+
+        assert_eq!(cpu.stack_pop(), 0x34);
+        assert_eq!(cpu.stack_pop(), 0x12);
+    }
+
+    #[test]
+    fn test_stack_push_pop_u16() {
+        let mut cpu = Cpu::new();
+
+        cpu.stack_push_u16(0x1234);
+        cpu.stack_push_u16(0x2345);
+
+        assert_eq!(cpu.stack_pop_u16(), 0x2345);
+        assert_eq!(cpu.stack_pop_u16(), 0x1234);
     }
 }

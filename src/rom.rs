@@ -43,16 +43,16 @@ impl Rom {
         let prg_rom_banks = header[4];
         let chr_rom_banks = header[5];
         let control_byte_1 = header[6];
-        let control_byte_2 = header[7];
+        // let control_byte_2 = header[7];
         // let size_of_prg_ram_times_8kb = header[8];
 
         let has_trainer_bytes = control_byte_1 ^ (1 << 2) == 0;
         let is_four_screen = control_byte_1 & (1 << 3) > 0;
         let is_vertical_screen = control_byte_1 & 1 > 0;
 
-        let lo = (control_byte_1 & 0b1111_0000) >> 4;
-        let hi = control_byte_2 & 0b1111_0000;
-        let rom_mapper_type = hi + lo;
+        // let lo = (control_byte_1 & 0b1111_0000) >> 4;
+        // let hi = control_byte_2 & 0b1111_0000;
+        // let rom_mapper_type = hi + lo;
 
         let mapper = Mapper::Zero;
 
