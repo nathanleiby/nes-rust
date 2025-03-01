@@ -78,7 +78,7 @@ pub trait Mem {
         // NES CPU uses Little-Endian addressing
         let lo = self.mem_peek(addr);
         let hi = self.mem_peek(addr + 1);
-        (hi as u16) << 8 | lo as u16
+        ((hi as u16) << 8) | lo as u16
     }
 
     fn mem_read(&mut self, addr: u16) -> u8;
@@ -89,7 +89,7 @@ pub trait Mem {
         // NES CPU uses Little-Endian addressing
         let lo = self.mem_read(addr);
         let hi = self.mem_read(addr + 1);
-        (hi as u16) << 8 | lo as u16
+        ((hi as u16) << 8) | lo as u16
     }
 
     // TODO: I think this will be used later
@@ -168,7 +168,7 @@ impl<'a, 'b: 'a> Cpu<'a> {
         let lo = self.stack_pop();
         let hi = self.stack_pop();
 
-        (hi as u16) << 8 | lo as u16
+        ((hi as u16) << 8) | lo as u16
     }
 
     //
@@ -181,7 +181,7 @@ impl<'a, 'b: 'a> Cpu<'a> {
         let (hi_ptr, is_page_crossed) = ptr.overflowing_add(1);
         let hi = self.mem_read(hi_ptr as u16);
 
-        let result = (hi as u16) << 8 | (lo as u16);
+        let result = ((hi as u16) << 8) | (lo as u16);
 
         (result, is_page_crossed)
     }
@@ -929,7 +929,7 @@ impl<'a, 'b: 'a> Cpu<'a> {
         let (hi_ptr, is_page_crossed) = ptr.overflowing_add(1);
         let hi = self.mem_peek(hi_ptr as u16);
 
-        let result = (hi as u16) << 8 | (lo as u16);
+        let result = ((hi as u16) << 8) | (lo as u16);
 
         (result, is_page_crossed)
     }
